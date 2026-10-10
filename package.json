@@ -1,7 +1,6 @@
 {
   "name": "kuai-tracking",
   "private": true,
-  "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "update": "node scripts/update-ais.mjs"
