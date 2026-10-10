@@ -33,9 +33,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Pull AISStream data
+      - name: Pull vessel data (AISStream + VesselFinder)
         env:
           AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
+          VESSELFINDER_API_KEY: ${{ secrets.VESSELFINDER_API_KEY }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '' }}
         run: node scripts/update-ais.mjs
       - name: Commit vessels.json

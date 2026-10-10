@@ -3,7 +3,10 @@
 // and position of every vessel on the Chile → China lane, and writes data/vessels.json for the app.
 //
 // Env:
-//   AISSTREAM_API_KEY  required (GitHub secret)
+//   AISSTREAM_API_KEY  AISStream.io key (free). Feeds the searchable vessel list.
+//   VESSELFINDER_API_KEY  optional, paid. Satellite + terrestrial positions and ETA for the vessels in
+//                      data/watchlist.json; whichever source has the newest data wins.
+//   VF_FIXTURE=path    use a saved VesselFinder JSON response instead of calling the API (tests)
 //   LISTEN_MINUTES     how long to listen (default 20)
 //   FORCE=1            skip the "6 AM Chile time, once a day" guard (manual runs)
 //   AIS_FIXTURE=path   replay a JSON-lines file of AISStream messages instead of connecting (tests)
@@ -88,6 +91,51 @@ async function replayFixture(file, statics, positions) {
   return lines.length;
 }
 
+// ── VESSELFINDER ──
+// Docs: https://api.vesselfinder.com/docs/vessels.html  (1 credit per terrestrial position, 10 per satellite)
+const vfTime = t => (t ? new Date(t.replace(' UTC', 'Z').replace(' ', 'T')).toISOString() : null);
+
+function vfRecords(json) {
+  return (Array.isArray(json) ? json : []).map(row => row && row.AIS).filter(Boolean).map(a => ({
+    mmsi: a.MMSI, imo: a.IMO || null, name: (a.NAME || '').trim(),
+    lat: a.LATITUDE, lon: a.LONGITUDE, sog: a.SPEED, cog: a.COURSE, navStatus: a.NAVSTAT,
+    posAt: vfTime(a.TIMESTAMP), dest: (a.DESTINATION || '').trim(),
+    eta: a.ETA ? vfTime(a.ETA.length === 19 ? a.ETA + ' UTC' : a.ETA) : null,
+    source: a.SRC === 'SAT' ? 'VesselFinder (satellite)' : 'VesselFinder'
+  }));
+}
+
+// Watchlist entries can be IMO (7 digits), MMSI (9 digits) or a vessel name found in the AIS data.
+function resolveWatchlist(watch, db) {
+  const imo = new Set(), mmsi = new Set();
+  const byName = {};
+  for (const v of Object.values(db.vessels || {})) byName[L.compact(v.name)] = v;
+  for (const w of watch) {
+    const c = L.compact(w);
+    if (/^\d{7}$/.test(c)) imo.add(c);
+    else if (/^\d{9}$/.test(c)) mmsi.add(c);
+    else if (byName[c]) byName[c].imo ? imo.add(String(byName[c].imo)) : mmsi.add(String(byName[c].mmsi));
+    else console.log(`Watchlist: "${w}" not found in AIS data yet (use its IMO number).`);
+  }
+  return { imo: [...imo], mmsi: [...mmsi] };
+}
+
+async function fetchVesselFinder(key, ids) {
+  if (process.env.VF_FIXTURE) return vfRecords(JSON.parse(await readFile(process.env.VF_FIXTURE, 'utf8')));
+  const out = [];
+  const chunk = (a, n) => a.length ? [a.slice(0, n), ...chunk(a.slice(n), n)] : [];
+  const batches = [...chunk(ids.imo, 50).map(b => `imo=${b.join(',')}`), ...chunk(ids.mmsi, 50).map(b => `mmsi=${b.join(',')}`)];
+  for (const q of batches) {
+    const res = await fetch(`https://api.vesselfinder.com/vessels?userkey=${encodeURIComponent(key)}&sat=1&${q}`);
+    const body = await res.text();
+    if (!res.ok) throw new Error(`VesselFinder HTTP ${res.status}: ${body.slice(0, 200)}`);
+    const json = JSON.parse(body);
+    if (json && json.error) throw new Error(`VesselFinder: ${json.error}`);
+    out.push(...vfRecords(json));
+  }
+  return out;
+}
+
 async function main() {
   const now = new Date();
   const db = await readJson(DB_PATH, { updatedAt: null, vessels: {} });
@@ -106,17 +154,35 @@ async function main() {
   let messages;
   if (process.env.AIS_FIXTURE) {
     messages = await replayFixture(process.env.AIS_FIXTURE, statics, positions);
-  } else {
-    const key = process.env.AISSTREAM_API_KEY;
-    if (!key) throw new Error('AISSTREAM_API_KEY is not set.');
+  } else if (process.env.AISSTREAM_API_KEY) {
     console.log(`Listening to AISStream for ${LISTEN_MS / 60000} min…`);
-    messages = await listenLive(statics, positions, key);
+    messages = await listenLive(statics, positions, process.env.AISSTREAM_API_KEY);
+  } else if (!process.env.VESSELFINDER_API_KEY) {
+    throw new Error('Set AISSTREAM_API_KEY and/or VESSELFINDER_API_KEY.');
   }
 
-  const stats = L.mergeSnapshot(db, statics, positions, process.env.NOW || now.toISOString(), watch);
-  await writeFile(DB_PATH, JSON.stringify(db));
-  console.log(`Messages ${messages}, static ${statics.size}, positions ${positions.size}; ` +
+  const nowIso = process.env.NOW || now.toISOString();
+  const stats = L.mergeSnapshot(db, statics, positions, nowIso, watch);
+  console.log(`AISStream: messages ${messages || 0}, static ${statics.size}, positions ${positions.size}; ` +
     `vessels added ${stats.added}, updated ${stats.updated}, total ${stats.total}.`);
+
+  // A VesselFinder failure (no credits, bad key) must not lose the AISStream update.
+  if (process.env.VESSELFINDER_API_KEY || process.env.VF_FIXTURE) {
+    try {
+      const ids = resolveWatchlist(watch, db);
+      if (ids.imo.length + ids.mmsi.length) {
+        const recs = await fetchVesselFinder(process.env.VESSELFINDER_API_KEY, ids);
+        const used = L.mergeExternal(db, recs, nowIso);
+        console.log(`VesselFinder: ${recs.length} vessels returned, ${used} newer than AISStream.`);
+      } else console.log('VesselFinder: watchlist is empty, nothing to ask for.');
+    } catch (e) {
+      console.error(`VesselFinder skipped: ${e.message}`);
+      process.exitCode = 0;
+    }
+  }
+
+  db.updatedAt = nowIso;
+  await writeFile(DB_PATH, JSON.stringify(db));
 }
 
 main().catch(err => { console.error(err.message); process.exit(1); });

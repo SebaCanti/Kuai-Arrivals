@@ -127,3 +127,49 @@ test('time guard skips runs before 6 AM Chile or twice a day', () => {
   const out = execFileSync('node', ['scripts/update-ais.mjs'], { env: { ...process.env, DATA_DIR: dir, AISSTREAM_API_KEY: '', FORCE: '' } }).toString();
   assert.match(out, /Skipping/);
 });
+
+test('carrier from vessel name', () => {
+  assert.equal(L.carrierFromName('MAERSK SKARSTIND'), 'MAERSK');
+  assert.equal(L.carrierFromName('MSC CHERRY'), 'MSC');
+  assert.equal(L.carrierFromName('EVER GIVEN'), 'EVERGREEN');
+  assert.equal(L.carrierFromName('ONEGA STAR'), null);
+  assert.equal(L.carrierFromName('RIO BLANCO'), null);
+});
+
+test('VesselFinder fills the gap mid-ocean and the freshest source wins', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'kuai-'));
+  const old = { mmsi: 111, name: 'MAERSK TEST', imo: 9000001, dest: 'CNSHA', destPort: 'SHANGHAI', eta: '2026-11-20T10:00:00.000Z',
+    lat: -31.5, lon: -78, sog: 17, posAt: '2026-10-11T09:02:00.000Z', posSource: 'AISStream', staticAt: '2026-10-10T09:01:00.000Z',
+    lastChileAt: '2026-10-10T09:02:00.000Z', lastSeen: '2026-10-11T09:02:00.000Z', etaHistory: [{ eta: '2026-11-20T10:00:00.000Z' }],
+    voyage: { port: 'SHANGHAI', firstEta: '2026-11-20T10:00:00.000Z', departedAt: '2026-10-10T09:02:00.000Z', arrivedAt: null } };
+  writeFileSync(path.join(dir, 'vessels.json'), JSON.stringify({ updatedAt: '2026-10-11T09:10:00Z', vessels: { 111: old } }));
+  writeFileSync(path.join(dir, 'watchlist.json'), JSON.stringify(['MAERSK TEST', '9999999']));
+  const vf = [
+    { AIS: { MMSI: 111, IMO: 9000001, NAME: 'MAERSK TEST', TIMESTAMP: '2026-10-29 22:15:00 UTC', LATITUDE: 12.5, LONGITUDE: -165.2,
+      SPEED: 16.1, COURSE: 290, NAVSTAT: 0, DESTINATION: 'CN SHA', ETA: '2026-11-23 06:00:00', SRC: 'SAT' } },
+    // An older position than ours for another vessel must not be invented as China-bound data newer than nothing:
+    { AIS: { MMSI: 999, IMO: 9999999, NAME: 'OTHER', TIMESTAMP: '2026-10-29 10:00:00 UTC', LATITUDE: 22.3, LONGITUDE: 114.1,
+      SPEED: 0.1, NAVSTAT: 5, DESTINATION: 'HKHKG', ETA: '2026-10-29 08:00:00', SRC: 'TER' } }
+  ];
+  const f = path.join(dir, 'vf.json');
+  writeFileSync(f, JSON.stringify(vf));
+  const empty = path.join(dir, 'empty.jsonl');
+  writeFileSync(empty, '');
+  const out = execFileSync('node', ['scripts/update-ais.mjs'], { env: { ...process.env, DATA_DIR: dir, AIS_FIXTURE: empty, VF_FIXTURE: f, NOW: '2026-10-30T09:10:00Z' } }).toString();
+  assert.match(out, /VesselFinder: 2 vessels returned, 2 newer/);
+  const db = JSON.parse(readFileSync(path.join(dir, 'vessels.json'), 'utf8'));
+  const v = db.vessels['111'];
+  assert.equal(v.posSource, 'VesselFinder (satellite)');
+  assert.equal(v.lat, 12.5);
+  assert.equal(v.eta, '2026-11-23T06:00:00.000Z');
+  assert.equal(v.voyage.firstEta, '2026-11-20T10:00:00.000Z');
+  assert.equal(db.vessels['999'].voyage.arrivedAt, '2026-10-29T10:00:00.000Z');
+
+  // Older data does not overwrite newer data.
+  assert.equal(L.mergeExternal(db, [{ mmsi: 111, name: 'MAERSK TEST', lat: 0, lon: 0, posAt: '2026-10-20T00:00:00.000Z', dest: 'X', source: 'VesselFinder' }], '2026-10-30T09:10:00Z'), 0);
+  assert.equal(db.vessels['111'].lat, 12.5);
+
+  // Stale alert names the carrier.
+  const alerts = L.pendingAlerts([{ id: '111', mmsi: 111, name: 'MAERSK TEST' }], db, {}, { staleDays: 3 }, Date.parse('2026-11-03T12:00:00Z'));
+  assert.match(alerts.find(a => a.tag.startsWith('stale')).body, /Maersk website/);
+});

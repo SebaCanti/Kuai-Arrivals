@@ -68,7 +68,11 @@
           <label class="btn">Import<input type="file" id="importFile" accept="application/json" hidden></label>
         </span>
       </div>
-      <p class="note">ETA and destination come from AIS (entered by each vessel's crew) and are refreshed daily at 6:00 AM Chile time. Mid-ocean positions can be missing for days; use a BL or container number to check the carrier's site.</p>
+      <div class="row">
+        <span>VesselFinder watchlist<small>Vessels the daily job checks by satellite (paid API). Copies your list and opens the file on GitHub.</small></span>
+        <button type="button" id="watchBtn" class="btn">Copy list</button>
+      </div>
+      <p class="note">ETA and destination come from AIS (entered by each vessel's crew) and are refreshed daily at 6:00 AM Chile time from AISStream and, if set up, VesselFinder; the newest data wins. After the days set above without an update, the card links to the carrier's tracking page.</p>
       <div class="sheet-foot"><button class="btn primary" value="close">Done</button></div>
     </form>
   </dialog>

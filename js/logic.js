@@ -109,7 +109,7 @@
         updated++;
       }
 
-      if (st) {
+      if (st && (!v.staticAt || (st._time || nowIso) >= v.staticAt)) {
         v.name = (st.Name || v.name).trim();
         if (st.ImoNumber) v.imo = st.ImoNumber;
         if (st.CallSign) v.callsign = st.CallSign.trim();
@@ -126,7 +126,8 @@
           if (v.etaHistory.length > 15) v.etaHistory = v.etaHistory.slice(-15);
         }
       }
-      if (pos) {
+      if (pos && (!v.posAt || (pos._time || nowIso) >= v.posAt)) {
+        v.posSource = 'AISStream';
         v.lat = round(pos.Latitude, 4);
         v.lon = round(pos.Longitude, 4);
         v.sog = pos.Sog;
@@ -148,6 +149,47 @@
     db.vessels = vessels;
     db.updatedAt = nowIso;
     return { added, updated, total: Object.keys(vessels).length };
+  }
+
+  // Records from other sources (e.g. VesselFinder API). Each field group is only taken when it is
+  // newer than what the vessel already has, so the freshest source always wins.
+  // rec: { mmsi, imo, name, lat, lon, sog, cog, navStatus, posAt, dest, eta, staticAt, source }
+  function mergeExternal(db, records, nowIso) {
+    const vessels = db.vessels || (db.vessels = {});
+    let used = 0;
+    for (const r of records) {
+      if (!r || !r.mmsi || !r.name) continue;
+      const mmsi = String(r.mmsi);
+      const v = vessels[mmsi] || (vessels[mmsi] = { mmsi: Number(mmsi), name: r.name, etaHistory: [], firstSeen: nowIso });
+      let changed = false;
+      if (r.imo) v.imo = r.imo;
+      if (r.posAt && r.lat != null && (!v.posAt || r.posAt > v.posAt)) {
+        Object.assign(v, { lat: round(r.lat, 4), lon: round(r.lon, 4), sog: r.sog, cog: r.cog, navStatus: r.navStatus,
+          posAt: r.posAt, posSource: r.source });
+        if (inChile(v.lat, v.lon)) v.lastChileAt = v.posAt;
+        changed = true;
+      }
+      const stAt = r.staticAt || r.posAt;
+      if (stAt && r.dest != null && (!v.staticAt || stAt > v.staticAt)) {
+        v.name = r.name;
+        v.dest = r.dest;
+        v.destPort = parseDestination(r.dest).port;
+        v.eta = r.eta || null;
+        v.staticAt = stAt;
+        if (r.eta) {
+          const last = v.etaHistory[v.etaHistory.length - 1];
+          if (!last || last.eta !== r.eta) v.etaHistory.push({ eta: r.eta, seen: nowIso });
+          if (v.etaHistory.length > 15) v.etaHistory = v.etaHistory.slice(-15);
+        }
+        changed = true;
+      }
+      if (changed) {
+        used++;
+        v.lastSeen = [v.posAt, v.staticAt].filter(Boolean).sort().pop();
+        updateVoyage(v, nowIso);
+      }
+    }
+    return used;
   }
 
   // A voyage = one trip to one China port. Tracks first ETA, estimated departure and arrival.
@@ -247,10 +289,15 @@
       }
       if (st.stale && v) {
         const k = `stale:${s.id}:${(st.lastSeen || '').slice(0, 10)}`;
-        if (!memo[k]) { memo[k] = 1; out.push({ tag: k, title: `${s.name}: no AIS update`, body: `No position for ${st.daysSinceUpdate} days. Check the carrier with a BL or container number.` }); }
+        if (!memo[k]) { memo[k] = 1; out.push({ tag: k, title: `${s.name}: no AIS update`, body: `No position for ${st.daysSinceUpdate} days. Check the ETA on ${carrierLabel(s)} with a BL or container number.` }); }
       }
     }
     return out;
+  }
+
+  function carrierLabel(s) {
+    const key = s.carrier || ((s.bls || [])[0] && detectCarrier(s.bls[0].ref)) || carrierFromName(s.name);
+    return key && CARRIERS[key] ? `the ${CARRIERS[key].name} website` : "the carrier's website";
   }
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -261,20 +308,39 @@
   }
 
   // ── CARRIER TRACKING LINKS (BL / container fallback) ──
+  // names: words in a vessel name that usually identify the operator (used when no BL is saved).
+  // home: the carrier's tracking page, where a BL or container number can be entered.
   const CARRIERS = {
-    MAERSK:  { name: 'Maersk',      prefixes: ['MAEU', 'MSKU', 'MRKU', 'MRSU', 'MCPU', 'MSFU', 'MNBU', 'MMAU', 'MSAU', 'MVIU', 'SUDU', 'SEAU'],
+    MAERSK:  { name: 'Maersk',      names: ['MAERSK'], home: 'https://www.maersk.com/tracking/', prefixes: ['MAEU', 'MSKU', 'MRKU', 'MRSU', 'MCPU', 'MSFU', 'MNBU', 'MMAU', 'MSAU', 'MVIU', 'SUDU', 'SEAU'],
       url: r => `https://www.maersk.com/tracking/${encodeURIComponent(r)}` },
-    MSC:     { name: 'MSC',         prefixes: ['MSCU', 'MEDU', 'MSDU', 'MSMU', 'MSNU', 'MSBU'],
+    MSC:     { name: 'MSC',         names: ['MSC'], home: 'https://www.msc.com/en/track-a-shipment', prefixes: ['MSCU', 'MEDU', 'MSDU', 'MSMU', 'MSNU', 'MSBU'],
       url: r => `https://www.msc.com/en/track-a-shipment?trackingNumber=${encodeURIComponent(r)}` },
-    CMACGM:  { name: 'CMA CGM',     prefixes: ['CMAU', 'CGMU', 'CMDU', 'APLU', 'APZU', 'ANNU', 'ECMU', 'TCLU'],
+    CMACGM:  { name: 'CMA CGM',     names: ['CMA CGM', 'APL'], home: 'https://www.cma-cgm.com/ebusiness/tracking', prefixes: ['CMAU', 'CGMU', 'CMDU', 'APLU', 'APZU', 'ANNU', 'ECMU', 'TCLU'],
       url: r => `https://www.cma-cgm.com/ebusiness/tracking/search?SearchBy=BL&Reference=${encodeURIComponent(r)}` },
-    HAPAG:   { name: 'Hapag-Lloyd', prefixes: ['HLCU', 'HLXU', 'HLBU', 'UACU'],
+    HAPAG:   { name: 'Hapag-Lloyd', names: [], home: 'https://www.hapag-lloyd.com/en/online-business/track/track-by-container-solution.html', prefixes: ['HLCU', 'HLXU', 'HLBU', 'UACU'],
       url: r => `https://www.hapag-lloyd.com/en/online-business/track/track-by-container-solution.html?container=${encodeURIComponent(r)}` },
-    COSCO:   { name: 'COSCO / OOCL', prefixes: ['COSU', 'CBHU', 'CSNU', 'OOLU', 'CCLU'],
+    COSCO:   { name: 'COSCO / OOCL', names: ['COSCO', 'OOCL'], home: 'https://elines.coscoshipping.com/ebusiness/cargoTracking', prefixes: ['COSU', 'CBHU', 'CSNU', 'OOLU', 'CCLU'],
       url: r => `https://elines.coscoshipping.com/ebusiness/cargoTracking?trackingType=CONTAINER&number=${encodeURIComponent(r)}` },
-    ONE:     { name: 'ONE',         prefixes: ['ONEY', 'ONEU'],
-      url: r => `https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking?trkNoParam=${encodeURIComponent(r)}` }
+    ONE:     { name: 'ONE',         names: ['ONE'], home: 'https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking', prefixes: ['ONEY', 'ONEU'],
+      url: r => `https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking?trkNoParam=${encodeURIComponent(r)}` },
+    EVERGREEN: { name: 'Evergreen', names: ['EVER'], home: 'https://ct.shipmentlink.com/servlet/TDB1_CargoTracking.do', prefixes: ['EGLV', 'EGHU', 'EISU', 'EMCU'],
+      url: () => 'https://ct.shipmentlink.com/servlet/TDB1_CargoTracking.do' },
+    ZIM:     { name: 'ZIM',         names: ['ZIM'], home: 'https://www.zim.com/tools/track-a-shipment', prefixes: ['ZIMU', 'ZCSU'],
+      url: r => `https://www.zim.com/tools/track-a-shipment?consnumber=${encodeURIComponent(r)}` },
+    HMM:     { name: 'HMM',         names: ['HMM', 'HYUNDAI'], home: 'https://www.hmm21.com/e-service/general/trackNTrace/TrackNTrace.do', prefixes: ['HDMU', 'HMMU'],
+      url: () => 'https://www.hmm21.com/e-service/general/trackNTrace/TrackNTrace.do' },
+    YANGMING: { name: 'Yang Ming',  names: ['YM '], home: 'https://www.yangming.com/e-service/track_trace/track_trace_cargo_tracking.aspx', prefixes: ['YMLU', 'YMMU'],
+      url: () => 'https://www.yangming.com/e-service/track_trace/track_trace_cargo_tracking.aspx' }
   };
+
+  // Guess the operator from the vessel name ("MAERSK SKARSTIND", "MSC ...", "EVER GIVEN").
+  function carrierFromName(name) {
+    const n = ' ' + String(name || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim() + ' ';
+    for (const key of Object.keys(CARRIERS)) {
+      if (CARRIERS[key].names.some(w => n.startsWith(' ' + w.trim() + ' ') || (w.length > 3 && n.includes(' ' + w.trim() + ' ')))) return key;
+    }
+    return null;
+  }
 
   function detectCarrier(ref) {
     const p = compact(ref).slice(0, 4);
@@ -288,7 +354,7 @@
   }
 
   const api = { DAY, PORTS, CARRIERS, CHILE_BOX, parseDestination, inferEta, distanceKm, inChile, isAtPort,
-    mergeSnapshot, updateVoyage, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
+    mergeSnapshot, mergeExternal, updateVoyage, carrierFromName, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KuaiLogic = api;
 })(typeof self !== 'undefined' ? self : this);

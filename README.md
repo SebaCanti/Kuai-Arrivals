@@ -6,11 +6,13 @@ PWA para seguir naves de Chile a China (Shanghai, Tianjin, Hong Kong, Nansha, Sh
 
 - **App** (`index.html`, `js/`, `css/`, `sw.js`): HTML/JS sin build. La lista de naves, BL y fechas manuales se guardan en `localStorage` (usa Export/Import en Settings para pasarla a otro equipo).
 - **Datos** (`data/vessels.json`): los genera todos los días a las 6:00 (hora de Chile) el workflow `.github/workflows/update-and-deploy.yml`, que escucha AISStream.io unos minutos y guarda las naves de la ruta Chile → China (destino AIS a un puerto chino o chileno, o vistas en la costa chilena). Después publica el sitio en GitHub Pages.
-- **Siempre seguir una nave**: agrega su nombre, IMO o MMSI a `data/watchlist.json`.
+- **VesselFinder (opcional, pagado)**: si existe el secret `VESSELFINDER_API_KEY`, el job también consulta la API de VesselFinder (con satélite) para las naves de `data/watchlist.json` y se queda con el dato más reciente de cada fuente. En la app, Settings → *Copy list* copia tus naves para pegarlas en ese archivo.
+- **Sin datos por 3 días** (configurable): la tarjeta y la notificación te mandan a la página de tracking de la naviera (detectada por el nombre de la nave, por el BL o elegida en Details).
+- **Siempre seguir una nave**: agrega su IMO, MMSI o nombre a `data/watchlist.json`.
 
 ## Puesta en marcha
 
-1. Repo → Settings → Secrets and variables → Actions → New secret: `AISSTREAM_API_KEY`.
+1. Crea una clave gratis en https://aisstream.io (entra con tu cuenta de GitHub → API Keys) y guárdala en Repo → Settings → Secrets and variables → Actions → New secret: `AISSTREAM_API_KEY`. Opcional: `VESSELFINDER_API_KEY`.
 2. Repo → Settings → Pages → Source: **GitHub Actions**.
 3. Actions → *AIS update & deploy* → Run workflow (primera carga de datos).
 

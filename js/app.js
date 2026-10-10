@@ -175,11 +175,16 @@
     let warn = '';
     if (st.stale) {
       const links = (s.bls || []).map(b => blLink(b)).filter(Boolean).join(' · ');
-      const what = v ? `No AIS update for ${st.daysSinceUpdate} days.` : 'Not found in the AIS data yet.';
-      warn = `<div class="warn">⚠ ${what} ${links ? 'Check the carrier: ' + links : 'Add a BL or container number to check the carrier\'s site.'}</div>`;
+      const what = v ? `No update for ${st.daysSinceUpdate} days.` : 'Not found in the AIS data yet.';
+      const ck = carrierKey(s);
+      const home = ck ? `<a href="${esc(L.CARRIERS[ck].home)}" target="_blank" rel="noopener">${esc(L.CARRIERS[ck].name)} tracking ↗</a>` : '';
+      const next = links ? `Check the ETA with your BL: ${links}`
+        : home ? `Check the ETA on ${home} with a BL or container number (add it in Details for a direct link).`
+        : 'Set the carrier and add a BL or container number in Details to check the ETA on the carrier\'s site.';
+      warn = `<div class="warn">⚠ ${what} ${next}</div>`;
     }
     const ais = v && v.lastSeen
-      ? `AIS ${fmtDateTime(v.lastSeen)}${v.sog != null ? ` · ${v.sog.toFixed(1)} kn` : ''}`
+      ? `Updated ${fmtDateTime(v.lastSeen)}${v.sog != null ? ` · ${v.sog.toFixed(1)} kn` : ''}${v.posSource ? ` · ${v.posSource}` : ''}`
       : 'No AIS position';
     return `<article class="card ${st.state === 'arrived' ? 'arrived' : ''}" data-id="${esc(s.id)}">
       <div class="card-head">
@@ -202,16 +207,22 @@
       Object.keys(L.PORTS).map(k => `<option value="${k}" ${s.port === k ? 'selected' : ''}>${L.PORTS[k].name}</option>`).join('');
     const carrierOpts = '<option value="">Auto</option>' +
       Object.keys(L.CARRIERS).map(k => `<option value="${k}">${L.CARRIERS[k].name}</option>`).join('');
+    const autoCarrier = L.carrierFromName(s.name);
+    const vesselCarrierOpts = `<option value="">Auto${autoCarrier ? ` (${L.CARRIERS[autoCarrier].name})` : ''}</option>` +
+      Object.keys(L.CARRIERS).map(k => `<option value="${k}" ${s.carrier === k ? 'selected' : ''}>${L.CARRIERS[k].name}</option>`).join('');
     const bls = (s.bls || []).map((b, i) => `<li><span>${esc(b.ref)} <span class="muted">${esc(L.CARRIERS[b.carrier || L.detectCarrier(b.ref)]?.name || 'Unknown carrier')}</span></span>
       <span>${blLink(b) || ''} <button class="x" data-act="rm-bl" data-i="${i}" aria-label="Remove">×</button></span></li>`).join('');
     const ais = v ? `AIS destination: “${esc(v.dest || '—')}” · IMO ${esc(v.imo || '—')} · MMSI ${esc(v.mmsi)}<br>
-      ${v.lat != null ? `Position ${v.lat.toFixed(2)}, ${v.lon.toFixed(2)} · ` : ''}AIS ETA ${L.fmtDate(v.eta)}
+      ${v.posSource ? `Source: ${esc(v.posSource)} · ` : ''}${v.lat != null ? `Position ${v.lat.toFixed(2)}, ${v.lon.toFixed(2)} · ` : ''}AIS ETA ${L.fmtDate(v.eta)}
       ${v.etaHistory && v.etaHistory.length > 1 ? `<br>ETA history: ${v.etaHistory.map(h => L.fmtDate(h.eta)).join(' → ')}` : ''}<br>
       <a href="https://www.vesselfinder.com/vessels/details/${esc(v.imo || v.mmsi)}" target="_blank" rel="noopener">VesselFinder</a> ·
       <a href="https://www.marinetraffic.com/en/ais/details/ships/mmsi:${esc(v.mmsi)}" target="_blank" rel="noopener">MarineTraffic</a>`
       : 'This vessel is not in the AIS data yet. It is linked automatically when it appears; meanwhile set the dates by hand.';
     return `<div class="details">
-      <label>Destination port<select data-field="port">${portOpts}</select></label>
+      <div class="grid2">
+        <label>Destination port<select data-field="port">${portOpts}</select></label>
+        <label>Carrier<select data-field="carrier">${vesselCarrierOpts}</select></label>
+      </div>
       <div class="grid2">
         <label>Departure (ATD)<input type="date" data-field="departedManual" value="${dateVal(s.departedManual || st.departed)}"></label>
         <label>ETA override<input type="date" data-field="etaManual" value="${dateVal(s.etaManual)}"></label>
@@ -228,6 +239,10 @@
       <div class="info">${ais}</div>
       <div><button class="btn danger" data-act="remove">Remove vessel</button></div>
     </div>`;
+  }
+
+  function carrierKey(s) {
+    return s.carrier || ((s.bls || [])[0] && L.detectCarrier(s.bls[0].ref)) || L.carrierFromName(s.name);
   }
 
   function blLink(b) {
@@ -267,6 +282,7 @@
     const s = saved.find(x => x.id === el.closest('.card').dataset.id);
     const f = el.dataset.field;
     if (f === 'port') { s.port = el.value || null; s.originalEta = null; freezeOriginal(s); }
+    else if (f === 'carrier') s.carrier = el.value || null;
     else s[f] = el.value ? `${el.value}T12:00:00.000Z` : null;
     if (f === 'originalEta' && !el.value) freezeOriginal(s);
     persist();
@@ -338,6 +354,18 @@
     } catch { toast('Could not read that file'); }
   }
 
+  // The daily job asks VesselFinder only for the vessels listed in data/watchlist.json in the repo.
+  async function copyWatchlist() {
+    const list = saved.filter(s => !arrivedOf(s)).map(s => String(s.imo || s.mmsi || s.name));
+    const text = JSON.stringify(list, null, 2);
+    try { await navigator.clipboard.writeText(text); toast('Copied. Paste it into data/watchlist.json on GitHub'); }
+    catch { prompt('Copy this into data/watchlist.json', text); }
+    const m = location.hostname.match(/^([^.]+)\.github\.io$/);
+    const repo = location.pathname.split('/')[1];
+    if (m && repo) window.open(`https://github.com/${m[1]}/${repo}/edit/main/data/watchlist.json`, '_blank', 'noopener');
+  }
+  function arrivedOf(s) { return L.computeStatus(s, vesselOf(s), Date.now(), settings.staleDays).arrivedAt; }
+
   // ── UTIL ──
   function fmtDateTime(iso) {
     const d = new Date(iso);
@@ -378,6 +406,7 @@
     $('notifToggle').addEventListener('change', e => setNotifications(e.target.checked));
     $('staleDays').addEventListener('change', e => { settings.staleDays = Math.max(1, Number(e.target.value) || 3); persist(); render(); });
     $('exportBtn').addEventListener('click', exportList);
+    $('watchBtn').addEventListener('click', copyWatchlist);
     $('importFile').addEventListener('change', e => { if (e.target.files[0]) importList(e.target.files[0]); e.target.value = ''; });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fetchData(); });
 

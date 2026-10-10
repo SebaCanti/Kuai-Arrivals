@@ -145,3 +145,4 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   .top, main { max-width: 1120px; }
   .list { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
 }
+.info a { color: var(--blue); }
