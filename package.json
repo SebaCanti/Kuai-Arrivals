@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.mjs",
     "update": "node scripts/update-ais.mjs"
   },
   "engines": { "node": ">=22" }

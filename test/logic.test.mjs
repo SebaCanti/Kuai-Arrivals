@@ -1,4 +1,4 @@
-// Run: node --test test/
+// Run: npm test
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
