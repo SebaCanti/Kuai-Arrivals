@@ -1,0 +1,10 @@
+{
+  "name": "kuai-tracking",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "update": "node scripts/update-ais.mjs"
+  },
+  "engines": { "node": ">=22" }
+}

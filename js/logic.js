@@ -1,0 +1,294 @@
+// Kuai Tracking — shared logic (browser app, service worker and the daily AIS job)
+// Classic script: exposes self.KuaiLogic in the browser and module.exports in Node.
+(function (root) {
+  'use strict';
+
+  const DAY = 86400000;
+
+  // ── DESTINATION PORTS (China) ──
+  // radiusKm: distance from the port centre at which a slow/stopped vessel counts as arrived.
+  const PORTS = {
+    SHANGHAI: { name: 'Shanghai',  lat: 30.95, lon: 121.95, radiusKm: 70,
+      codes: ['CNSHA', 'SHANGHAI', 'YANGSHAN', 'CNYSA', 'WAIGAOQIAO', 'CNWGQ'] },
+    TIANJIN:  { name: 'Tianjin',   lat: 38.97, lon: 117.85, radiusKm: 45,
+      codes: ['CNTXG', 'CNTSN', 'TIANJIN', 'XINGANG'] },
+    HONGKONG: { name: 'Hong Kong', lat: 22.32, lon: 114.10, radiusKm: 22,
+      codes: ['HKHKG', 'HONGKONG', 'HONGKONG'] },
+    NANSHA:   { name: 'Nansha',    lat: 22.68, lon: 113.66, radiusKm: 25,
+      codes: ['CNNSA', 'NANSHA', 'CNCAN', 'GUANGZHOU'] },
+    SHENZHEN: { name: 'Shenzhen',  lat: 22.52, lon: 114.08, radiusKm: 28,
+      codes: ['CNSZX', 'SHENZHEN', 'YANTIAN', 'CNYTN', 'SHEKOU', 'CNSHK', 'CHIWAN', 'CNCWN', 'DACHAN', 'CNDCB'] }
+  };
+
+  // Chilean loading ports (used to recognise vessels on the lane before they sail).
+  const CHILE_CODES = ['CLSAI', 'SANANTONIO', 'CLVAP', 'VALPARAISO', 'CLCNL', 'CORONEL', 'CLLQN', 'LIRQUEN',
+    'CLSVE', 'SANVICENTE', 'CLTAL', 'TALCAHUANO', 'CLIQQ', 'IQUIQUE', 'CLARI', 'ARICA', 'CLANF', 'ANTOFAGASTA'];
+  // Rough box around the Chilean coast and its port approaches.
+  const CHILE_BOX = { latMin: -46, latMax: -17.5, lonMin: -75.5, lonMax: -69.5 };
+  const CHILE_REF = { lat: -33.59, lon: -71.62 }; // San Antonio, for distance-based progress
+
+  function compact(s) {
+    return String(s || '').toUpperCase().replace(/[^A-Z0-9>]/g, '');
+  }
+
+  // AIS destinations are free text typed by the crew: "CN SHA", "CLSAI>CNSHA", "YANTIAN", ...
+  function parseDestination(raw) {
+    const parts = compact(raw).split('>').filter(Boolean);
+    const last = parts.length ? parts[parts.length - 1] : '';
+    if (!last) return { port: null, chile: false };
+    for (const key of Object.keys(PORTS)) {
+      if (PORTS[key].codes.some(c => last.includes(c))) return { port: key, chile: false };
+    }
+    return { port: null, chile: CHILE_CODES.some(c => last.includes(c)) };
+  }
+
+  // AIS ETA has month/day/hour/minute but no year. Pick the year that puts it closest to `ref`.
+  function inferEta(eta, refIso) {
+    if (!eta || !eta.Month || !eta.Day || eta.Month > 12 || eta.Day > 31) return null;
+    const ref = new Date(refIso || Date.now());
+    const hour = eta.Hour >= 24 ? 12 : (eta.Hour || 0);
+    const minute = eta.Minute >= 60 ? 0 : (eta.Minute || 0);
+    let best = null;
+    for (const y of [ref.getUTCFullYear() - 1, ref.getUTCFullYear(), ref.getUTCFullYear() + 1]) {
+      const d = new Date(Date.UTC(y, eta.Month - 1, eta.Day, hour, minute));
+      if (d.getUTCMonth() !== eta.Month - 1) continue; // e.g. 31 Feb
+      // Bias towards the future: a past ETA more than ~2 months old is probably next year's.
+      const diff = d - ref;
+      const score = diff < -60 * DAY ? Math.abs(diff) * 4 : Math.abs(diff);
+      if (!best || score < best.score) best = { score, d };
+    }
+    return best ? best.d.toISOString() : null;
+  }
+
+  function distanceKm(aLat, aLon, bLat, bLon) {
+    const r = Math.PI / 180;
+    const dLat = (bLat - aLat) * r, dLon = (bLon - aLon) * r;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin(dLon / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(h));
+  }
+
+  function inChile(lat, lon) {
+    return lat >= CHILE_BOX.latMin && lat <= CHILE_BOX.latMax && lon >= CHILE_BOX.lonMin && lon <= CHILE_BOX.lonMax;
+  }
+
+  function isAtPort(portKey, lat, lon, sog, navStatus) {
+    const p = PORTS[portKey];
+    if (!p || lat == null || lon == null) return false;
+    const stopped = (sog != null && sog < 1.5) || navStatus === 1 || navStatus === 5; // 1 anchored, 5 moored
+    return stopped && distanceKm(lat, lon, p.lat, p.lon) <= p.radiusKm;
+  }
+
+  // ── DAILY MERGE (used by scripts/update-ais.mjs) ──
+  // db: { updatedAt, vessels: { [mmsi]: record } }
+  // statics / positions: Map(mmsi -> latest AISStream message body + meta)
+  function mergeSnapshot(db, statics, positions, nowIso, watch) {
+    const vessels = db.vessels || {};
+    const watchSet = new Set((watch || []).map(w => compact(w)));
+    const mmsis = new Set([...statics.keys(), ...positions.keys()]);
+    let added = 0, updated = 0;
+
+    for (const mmsi of mmsis) {
+      const st = statics.get(mmsi);
+      const pos = positions.get(mmsi);
+      let v = vessels[mmsi];
+
+      if (!v) {
+        // Only keep vessels relevant to the Chile → China lane.
+        const name = st ? (st.Name || '').trim() : (pos && pos.ShipName || '').trim();
+        const dest = st ? parseDestination(st.Destination) : { port: null, chile: false };
+        const cargo = st && st.Type >= 70 && st.Type <= 79;
+        const length = st && st.Dimension ? (st.Dimension.A || 0) + (st.Dimension.B || 0) : 0;
+        const nearChile = pos && inChile(pos.Latitude, pos.Longitude) && cargo && length >= 100;
+        const watched = watchSet.has(compact(name)) || watchSet.has(String(mmsi)) ||
+          (st && st.ImoNumber && watchSet.has(String(st.ImoNumber)));
+        if (!(dest.port || (dest.chile && cargo) || nearChile || watched)) continue;
+        if (!name) continue;
+        v = vessels[mmsi] = { mmsi: Number(mmsi), name, etaHistory: [], firstSeen: nowIso };
+        added++;
+      } else {
+        updated++;
+      }
+
+      if (st) {
+        v.name = (st.Name || v.name).trim();
+        if (st.ImoNumber) v.imo = st.ImoNumber;
+        if (st.CallSign) v.callsign = st.CallSign.trim();
+        v.type = st.Type;
+        if (st.Dimension) v.length = (st.Dimension.A || 0) + (st.Dimension.B || 0);
+        v.dest = (st.Destination || '').trim();
+        v.destPort = parseDestination(st.Destination).port;
+        const eta = inferEta(st.Eta, st._time || nowIso);
+        v.eta = eta;
+        v.staticAt = st._time || nowIso;
+        if (eta) {
+          const last = v.etaHistory[v.etaHistory.length - 1];
+          if (!last || last.eta !== eta) v.etaHistory.push({ eta, seen: nowIso });
+          if (v.etaHistory.length > 15) v.etaHistory = v.etaHistory.slice(-15);
+        }
+      }
+      if (pos) {
+        v.lat = round(pos.Latitude, 4);
+        v.lon = round(pos.Longitude, 4);
+        v.sog = pos.Sog;
+        v.cog = pos.Cog;
+        v.navStatus = pos.NavigationalStatus;
+        v.posAt = pos._time || nowIso;
+        if (inChile(v.lat, v.lon)) v.lastChileAt = v.posAt;
+      }
+      v.lastSeen = [v.posAt, v.staticAt].filter(Boolean).sort().pop();
+      updateVoyage(v, nowIso);
+    }
+
+    // Prune vessels not seen for 120 days (unless watched).
+    for (const [mmsi, v] of Object.entries(vessels)) {
+      const watched = watchSet.has(compact(v.name)) || watchSet.has(String(mmsi)) || (v.imo && watchSet.has(String(v.imo)));
+      if (!watched && v.lastSeen && Date.parse(nowIso) - Date.parse(v.lastSeen) > 120 * DAY) delete vessels[mmsi];
+    }
+
+    db.vessels = vessels;
+    db.updatedAt = nowIso;
+    return { added, updated, total: Object.keys(vessels).length };
+  }
+
+  // A voyage = one trip to one China port. Tracks first ETA, estimated departure and arrival.
+  function updateVoyage(v, nowIso) {
+    if (v.destPort) {
+      const voyage = v.voyage;
+      const isNew = !voyage || voyage.port !== v.destPort ||
+        (voyage.arrivedAt && v.lastChileAt && v.lastChileAt > voyage.arrivedAt);
+      if (isNew) {
+        v.voyage = { port: v.destPort, firstEta: v.eta || null, firstEtaAt: v.eta ? nowIso : null,
+          departedAt: null, arrivedAt: null, startedAt: nowIso };
+      } else if (!voyage.firstEta && v.eta) {
+        voyage.firstEta = v.eta; voyage.firstEtaAt = nowIso;
+      }
+    }
+    const voy = v.voyage;
+    if (!voy) return;
+    // Departure: last time it was seen on the Chilean coast, once it is seen outside it.
+    if (!voy.departedAt && v.lastChileAt && v.lat != null && !inChile(v.lat, v.lon) && v.posAt > v.lastChileAt) {
+      voy.departedAt = v.lastChileAt;
+      voy.departedEstimated = true;
+    }
+    if (!voy.arrivedAt && isAtPort(voy.port, v.lat, v.lon, v.sog, v.navStatus) &&
+        (!voy.departedAt || v.posAt > voy.departedAt)) {
+      voy.arrivedAt = v.posAt;
+    }
+  }
+
+  function round(n, d) { return n == null ? n : Math.round(n * 10 ** d) / 10 ** d; }
+
+  // ── VIEW MODEL (app + service worker) ──
+  // saved: the user's record in localStorage; v: the vessel record from data/vessels.json (or null)
+  function computeStatus(saved, v, nowMs, staleDays) {
+    nowMs = nowMs || Date.now();
+    const voy = v && v.voyage && (!saved.port || v.voyage.port === saved.port) ? v.voyage : null;
+    const port = saved.port || (voy && voy.port) || (v && v.destPort) || null;
+    const eta = saved.etaManual || (v && v.destPort === port ? v.eta : null) || (voy && voy.firstEta) || null;
+    const departed = saved.departedManual || (voy && voy.departedAt) || null;
+    const departedEstimated = !saved.departedManual && !!(voy && voy.departedEstimated);
+    const arrivedAt = saved.arrivedManual || (voy && voy.arrivedAt) || null;
+    const originalEta = saved.originalEta || (voy && voy.firstEta) || eta;
+
+    let progress = null, progressMode = null;
+    if (arrivedAt) { progress = 1; progressMode = 'arrived'; }
+    else if (departed && eta && Date.parse(eta) > Date.parse(departed)) {
+      progress = clamp((nowMs - Date.parse(departed)) / (Date.parse(eta) - Date.parse(departed)), 0, 0.99);
+      progressMode = 'time';
+    } else if (v && v.lat != null && port && PORTS[port] && !inChile(v.lat, v.lon)) {
+      const total = distanceKm(CHILE_REF.lat, CHILE_REF.lon, PORTS[port].lat, PORTS[port].lon);
+      const left = distanceKm(v.lat, v.lon, PORTS[port].lat, PORTS[port].lon);
+      progress = clamp(1 - left / total, 0, 0.99);
+      progressMode = 'distance';
+    } else if (v && v.lat != null && inChile(v.lat, v.lon)) {
+      progress = 0; progressMode = 'origin';
+    }
+
+    const daysLeft = !arrivedAt && eta ? Math.ceil((Date.parse(eta) - nowMs) / DAY) : null;
+    const ref = arrivedAt || eta;
+    const delayDays = ref && originalEta ? Math.round((startOfDay(ref) - startOfDay(originalEta)) / DAY) : null;
+    const lastSeen = v ? v.lastSeen : null;
+    const daysSinceUpdate = lastSeen ? Math.floor((nowMs - Date.parse(lastSeen)) / DAY) : null;
+    const stale = !arrivedAt && (v ? daysSinceUpdate >= (staleDays || 3) : true);
+
+    let state = 'nodata';
+    if (arrivedAt) state = 'arrived';
+    else if (departed || progressMode === 'distance') state = 'transit';
+    else if (v) state = 'origin';
+
+    return { port, portName: port && PORTS[port] ? PORTS[port].name : null, eta, originalEta, departed,
+      departedEstimated, arrivedAt, progress, progressMode, daysLeft, delayDays, lastSeen, daysSinceUpdate,
+      stale, state };
+  }
+
+  function startOfDay(iso) { const d = new Date(iso); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
+  function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+  // Events to notify about. `memo` is a plain object persisted by the caller (dedupe store).
+  function pendingAlerts(savedList, data, memo, settings, nowMs) {
+    const out = [];
+    const vessels = (data && data.vessels) || {};
+    for (const s of savedList) {
+      const v = s.mmsi ? vessels[s.mmsi] : null;
+      const st = computeStatus(s, v, nowMs, settings.staleDays);
+      if (st.arrivedAt) {
+        const k = `arr:${s.id}:${st.arrivedAt.slice(0, 10)}`;
+        if (!memo[k]) { memo[k] = 1; out.push({ tag: k, title: `${s.name} ARRIVED`, body: `Arrived at ${st.portName || 'port'} on ${fmtDate(st.arrivedAt)}.` }); }
+        continue;
+      }
+      if (st.eta) {
+        const lk = `lastEta:${s.id}`, day = st.eta.slice(0, 10);
+        if (memo[lk] && memo[lk] !== day) {
+          const d = st.delayDays;
+          out.push({ tag: `eta:${s.id}:${day}`, title: `${s.name}: new ETA ${fmtDate(st.eta)}`,
+            body: d ? `${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} ${d > 0 ? 'delayed' : 'early'} vs original ETA ${fmtDate(st.originalEta)}.` : 'Back on the original ETA.' });
+        }
+        memo[lk] = day;
+      }
+      if (st.stale && v) {
+        const k = `stale:${s.id}:${(st.lastSeen || '').slice(0, 10)}`;
+        if (!memo[k]) { memo[k] = 1; out.push({ tag: k, title: `${s.name}: no AIS update`, body: `No position for ${st.daysSinceUpdate} days. Check the carrier with a BL or container number.` }); }
+      }
+    }
+    return out;
+  }
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]}`;
+  }
+
+  // ── CARRIER TRACKING LINKS (BL / container fallback) ──
+  const CARRIERS = {
+    MAERSK:  { name: 'Maersk',      prefixes: ['MAEU', 'MSKU', 'MRKU', 'MRSU', 'MCPU', 'MSFU', 'MNBU', 'MMAU', 'MSAU', 'MVIU', 'SUDU', 'SEAU'],
+      url: r => `https://www.maersk.com/tracking/${encodeURIComponent(r)}` },
+    MSC:     { name: 'MSC',         prefixes: ['MSCU', 'MEDU', 'MSDU', 'MSMU', 'MSNU', 'MSBU'],
+      url: r => `https://www.msc.com/en/track-a-shipment?trackingNumber=${encodeURIComponent(r)}` },
+    CMACGM:  { name: 'CMA CGM',     prefixes: ['CMAU', 'CGMU', 'CMDU', 'APLU', 'APZU', 'ANNU', 'ECMU', 'TCLU'],
+      url: r => `https://www.cma-cgm.com/ebusiness/tracking/search?SearchBy=BL&Reference=${encodeURIComponent(r)}` },
+    HAPAG:   { name: 'Hapag-Lloyd', prefixes: ['HLCU', 'HLXU', 'HLBU', 'UACU'],
+      url: r => `https://www.hapag-lloyd.com/en/online-business/track/track-by-container-solution.html?container=${encodeURIComponent(r)}` },
+    COSCO:   { name: 'COSCO / OOCL', prefixes: ['COSU', 'CBHU', 'CSNU', 'OOLU', 'CCLU'],
+      url: r => `https://elines.coscoshipping.com/ebusiness/cargoTracking?trackingType=CONTAINER&number=${encodeURIComponent(r)}` },
+    ONE:     { name: 'ONE',         prefixes: ['ONEY', 'ONEU'],
+      url: r => `https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking?trkNoParam=${encodeURIComponent(r)}` }
+  };
+
+  function detectCarrier(ref) {
+    const p = compact(ref).slice(0, 4);
+    for (const key of Object.keys(CARRIERS)) if (CARRIERS[key].prefixes.includes(p)) return key;
+    return null;
+  }
+
+  function trackingUrl(ref, carrierKey) {
+    const key = carrierKey || detectCarrier(ref);
+    return key && CARRIERS[key] ? CARRIERS[key].url(compact(ref)) : null;
+  }
+
+  const api = { DAY, PORTS, CARRIERS, CHILE_BOX, parseDestination, inferEta, distanceKm, inChile, isAtPort,
+    mergeSnapshot, updateVoyage, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.KuaiLogic = api;
+})(typeof self !== 'undefined' ? self : this);

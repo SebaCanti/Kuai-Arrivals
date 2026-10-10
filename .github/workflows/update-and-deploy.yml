@@ -1,0 +1,66 @@
+name: AIS update & deploy
+
+on:
+  # 6:00 AM Chile time. Chile switches between UTC-3 (summer) and UTC-4 (winter), so this runs
+  # at 09, 10 and 11 UTC and the script only does the work once, on the first run at or after 6 AM.
+  schedule:
+    - cron: '0 9,10,11 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Update now even if it already ran today'
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ais-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pull AISStream data
+        env:
+          AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '' }}
+        run: node scripts/update-ais.mjs
+      - name: Commit vessels.json
+        run: |
+          git config user.name "kuai-bot"
+          git config user.email "kuai-bot@users.noreply.github.com"
+          git add data/vessels.json
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "AIS update $(date -u +%Y-%m-%d)"
+          git push
+
+  deploy:
+    needs: update
+    if: always() && (needs.update.result == 'success' || needs.update.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

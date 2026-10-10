@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kuai Tracking</title>
+  <meta name="description" content="Vessel ETA tracking, Chile to China">
+  <meta name="theme-color" content="#0b1118">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kuai">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo">⛴</span>
+      <div>
+        <h1>Kuai Tracking</h1>
+        <p class="sub" id="dataStamp">Loading data…</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="refreshBtn" title="Refresh data" aria-label="Refresh data">⟳</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="search">
+      <input id="search" type="search" placeholder="Search vessel name, IMO or MMSI…" autocomplete="off" spellcheck="false">
+      <ul id="results" class="results" hidden></ul>
+    </section>
+
+    <section class="saved">
+      <div class="saved-head">
+        <h2>Saved vessels <span id="savedCount" class="count"></span></h2>
+        <select id="sortSel" aria-label="Sort">
+          <option value="eta">Sort: ETA</option>
+          <option value="progress">Sort: Progress</option>
+          <option value="name">Sort: Name</option>
+          <option value="added">Sort: Recently added</option>
+        </select>
+      </div>
+      <div id="list" class="list"></div>
+      <p id="empty" class="empty" hidden>Search for a vessel above to start tracking it.</p>
+    </section>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" class="sheet">
+      <h2>Settings</h2>
+      <label class="row">
+        <span>Browser notifications<small>Arrivals, ETA changes and vessels without updates</small></span>
+        <input type="checkbox" id="notifToggle">
+      </label>
+      <label class="row">
+        <span>Warn when no AIS update for<small>days</small></span>
+        <input type="number" id="staleDays" min="1" max="30" value="3">
+      </label>
+      <div class="row">
+        <span>Backup<small>Saved vessels live in this browser only</small></span>
+        <span class="btns">
+          <button type="button" id="exportBtn" class="btn">Export</button>
+          <label class="btn">Import<input type="file" id="importFile" accept="application/json" hidden></label>
+        </span>
+      </div>
+      <p class="note">ETA and destination come from AIS (entered by each vessel's crew) and are refreshed daily at 6:00 AM Chile time. Mid-ocean positions can be missing for days; use a BL or container number to check the carrier's site.</p>
+      <div class="sheet-foot"><button class="btn primary" value="close">Done</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/logic.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
