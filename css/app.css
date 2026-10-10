@@ -139,3 +139,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   .days { font-size: 22px; }
 }
 .warn a { color: inherit; font-weight: 700; }
+
+/* Desktop: wider page, saved vessels in two columns */
+@media (min-width: 960px) {
+  .top, main { max-width: 1120px; }
+  .list { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+}
