@@ -1,5 +1,5 @@
-// Kuai Tracking — Service Worker
-const CACHE_NAME = 'kuai-v10';
+// Kuai Arrivals — Service Worker
+const CACHE_NAME = 'kuai-v11';
 const DATA_URL = 'data/vessels.json';
 
 const STATIC_ASSETS = [

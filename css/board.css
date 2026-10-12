@@ -1,4 +1,4 @@
-/* Kuai Tracking — airport arrivals-board designs. Active when <body data-design="a|b|c">. */
+/* Kuai Arrivals — airport arrivals-board designs. Active when <body data-design="a|b|c">. */
 .board-title, .clock { display: none; }
 
 body[data-design] .board-title { display: flex; align-items: baseline; gap: 12px; }

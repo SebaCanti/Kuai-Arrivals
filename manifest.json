@@ -1,6 +1,6 @@
 {
-  "name": "Kuai Tracking",
-  "short_name": "Kuai",
+  "name": "Kuai Arrivals",
+  "short_name": "Kuai Arrivals",
   "description": "Vessel ETA tracking, Chile to China",
   "start_url": "./index.html",
   "display": "standalone",

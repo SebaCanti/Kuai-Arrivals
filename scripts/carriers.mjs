@@ -1,4 +1,4 @@
-// Kuai Tracking — official carrier tracking by container number.
+// Kuai Arrivals — official carrier tracking by container number.
 // The container list comes from the KUAI_CONTAINERS repository secret (masked in logs, never public), which the
 // owner edits on GitHub. Only the ETA per vessel is published in data/vessels.json, never the container numbers.
 // Logs are public on a public repo, so nothing here prints a container number.

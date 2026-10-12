@@ -1,4 +1,4 @@
-// Kuai Tracking — app
+// Kuai Arrivals — app
 (function () {
   'use strict';
   const L = window.KuaiLogic;
@@ -570,7 +570,7 @@
     if (design) {
       document.body.dataset.design = design;
       document.querySelector('.board-title').innerHTML =
-        `<span class="bt-en">${flap('KUAI TRACKING')}</span><span class="bt-zh">${flap('快追踪', 500)}</span>`;
+        `<span class="bt-en">${flap('KUAI ARRIVALS')}</span><span class="bt-zh">${flap('快到港', 500)}</span>`;
       const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
       tick(); setInterval(tick, 10000);
     }

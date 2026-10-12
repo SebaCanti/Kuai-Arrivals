@@ -1,4 +1,4 @@
-// Kuai Tracking — daily AIS update.
+// Kuai Arrivals — daily AIS update.
 // Listens to the AISStream.io feed for a few minutes, keeps the latest static data (name, destination, ETA)
 // and position of every vessel on the Chile → China lane, and writes data/vessels.json for the app.
 //

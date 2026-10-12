@@ -1,4 +1,4 @@
-// Kuai Tracking — shared logic (browser app, service worker and the daily AIS job)
+// Kuai Arrivals — shared logic (browser app, service worker and the daily AIS job)
 // Classic script: exposes self.KuaiLogic in the browser and module.exports in Node.
 (function (root) {
   'use strict';
