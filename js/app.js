@@ -196,7 +196,7 @@
 
   function boardHeadHtml() {
     return `<div class="b-head" role="row">
-      <span>Vessel</span><span>To</span><span>Departed</span><span>Voyage</span><span title="Latest (updated) ETA">Upd ETA</span><span>Days</span><span>Status</span></div>`;
+      <span>Vessel</span><span>To</span><span>Departed</span><span>Voyage</span><span title="Latest (updated) ETA">Upd ETA</span><span title="Days to destination">DTD</span><span>Status</span></div>`;
   }
 
   function boardRowHtml({ s, v, st }, idx) {
