@@ -46,7 +46,9 @@ jobs:
           git add data/vessels.json
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
           git commit -m "AIS update $(date -u +%Y-%m-%d)"
-          git push
+          # Someone may have pushed while we were listening: rebase on top and retry.
+          for i in 1 2 3; do git pull --rebase origin main && git push && exit 0; sleep 5; done
+          exit 1
 
   deploy:
     needs: update
