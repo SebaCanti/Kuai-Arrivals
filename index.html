@@ -70,7 +70,7 @@
         <span>Vessel list (CSV)<small>Columns Nave, Fecha Zarpe, Fecha destino, Contenedor, Puerto destino. New vessels are added; vessels already saved get the new departure, port, ETA and containers. The first ETA stays as the Original ETA; later ones become the UPD ETA.</small></span>
         <label class="btn primary" style="white-space:nowrap">Add New Vessel List<input type="file" id="importFile" accept=".csv,text/csv,.txt,application/json,.json" hidden></label>
       </div>
-      <p class="note">ETA and destination come from AIS (entered by each vessel's crew) and are refreshed every 3 hours from AISStream and, if set up, VesselFinder; the newest data wins. After the days set above without an update, the card links to the carrier's tracking page.</p>
+      <p class="note">ETA and destination come from AIS (entered by each vessel's crew) and are refreshed every hour from AISStream and, if set up, VesselFinder; the newest data wins. After the days set above without an update, the card links to the carrier's tracking page.</p>
       <div class="sheet-foot"><button class="btn primary" value="close">Done</button></div>
     </form>
   </dialog>

@@ -8,7 +8,7 @@
 //                      data/watchlist.json; whichever source has the newest data wins.
 //   VF_FIXTURE=path    use a saved VesselFinder JSON response instead of calling the API (tests)
 //   LISTEN_MINUTES     how long to listen (default 20)
-//   FORCE=1            skip the "at most every 2 hours" guard (manual runs)
+//   FORCE=1            skip the "at most every 30 minutes" guard (manual runs)
 //   AIS_FIXTURE=path   replay a JSON-lines file of AISStream messages instead of connecting (tests)
 //   DATA_DIR           where vessels.json / watchlist.json live (default ./data)
 import { readFile, writeFile } from 'node:fs/promises';
@@ -158,9 +158,9 @@ async function main() {
   const db = await readJson(DB_PATH, { updatedAt: null, vessels: {} });
 
   if (!process.env.FORCE && !process.env.AIS_FIXTURE) {
-    // Runs every 3 hours; skip if another run already updated the data in the last 2 hours.
+    // Runs every hour; skip if another run already updated the data in the last 30 minutes.
     const ageMin = db.updatedAt ? (now - new Date(db.updatedAt)) / 60000 : Infinity;
-    if (ageMin < 120) {
+    if (ageMin < 30) {
       console.log(`Skipping: last update ${Math.round(ageMin)} min ago.`);
       return;
     }

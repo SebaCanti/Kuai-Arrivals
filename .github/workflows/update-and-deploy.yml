@@ -1,10 +1,10 @@
 name: AIS update & deploy
 
 on:
-  # Every 3 hours (09 UTC is 6 AM Chile in summer). The free AIS feed only hears ships near a coast,
-  # so listening several times a day catches more vessels as they pass in range.
+  # Every hour, listening 40 minutes each time. The free AIS feed only hears ships near a coast,
+  # so listening most of the day catches vessels as they pass in range.
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '5 * * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -28,7 +28,7 @@ jobs:
   update:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -39,6 +39,7 @@ jobs:
           AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
           VESSELFINDER_API_KEY: ${{ secrets.VESSELFINDER_API_KEY }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '' }}
+          LISTEN_MINUTES: 40
         run: node scripts/update-ais.mjs
       - name: Commit vessels.json
         run: |
