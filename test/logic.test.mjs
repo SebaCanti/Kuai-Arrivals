@@ -257,3 +257,27 @@ test('the hourly job turns the private container list into ETAs per vessel, with
   assert.equal(db.carrier.MAERSKTEST.port, 'SHANGHAI');
   assert.ok(!/MSKU|MSCU/.test(log + JSON.stringify(db)));
 });
+
+test('departure is found from any port, not only Chile', () => {
+  const db = { vessels: {} };
+  const st = new Map([['555', { Name: 'TS TEST', Type: 70, Destination: 'CNSHK', Eta: { Month: 10, Day: 24, Hour: 21, Minute: 0 },
+    Dimension: { A: 150, B: 50 }, _time: '2026-10-08T00:00:00Z' }]]);
+  // Moored in Sydney, then under way at sea a day later.
+  L.mergeSnapshot(db, st, new Map([['555', { Latitude: -33.86, Longitude: 151.2, Sog: 0, NavigationalStatus: 5, _time: '2026-10-08T01:00:00Z' }]]), '2026-10-08T01:00:00Z', []);
+  assert.equal(db.vessels['555'].voyage.departedAt, null);
+  L.mergeSnapshot(db, new Map(), new Map([['555', { Latitude: -34.45, Longitude: 151.8, Sog: 16, NavigationalStatus: 0, _time: '2026-10-09T01:00:00Z' }]]), '2026-10-09T01:00:00Z', []);
+  const voy = db.vessels['555'].voyage;
+  assert.equal(voy.departedAt, '2026-10-08T01:00:00Z');
+  assert.equal(voy.originLat, -33.86);
+  const status = L.computeStatus({ name: 'TS TEST' }, db.vessels['555'], Date.parse('2026-10-12T00:00:00Z'), 3);
+  assert.equal(status.state, 'transit');
+  assert.equal(status.departed, '2026-10-08T01:00:00Z');
+});
+
+test('a vessel first heard at sea, with no known departure, shows as in transit without made-up progress', () => {
+  const v = { name: 'AT SEA', lat: -20, lon: 160, sog: 15, navStatus: 0, destPort: 'SHENZHEN', eta: '2026-10-24T21:00:00.000Z',
+    lastSeen: '2026-10-12T00:00:00Z', voyage: { port: 'SHENZHEN', firstEta: '2026-10-24T21:00:00.000Z', departedAt: null, arrivedAt: null } };
+  const st = L.computeStatus({ name: 'AT SEA' }, v, Date.parse('2026-10-12T01:00:00Z'), 3);
+  assert.equal(st.state, 'transit');
+  assert.equal(st.progress, null);
+});

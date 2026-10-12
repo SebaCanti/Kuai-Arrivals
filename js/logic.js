@@ -141,7 +141,7 @@
         v.cog = pos.Cog;
         v.navStatus = pos.NavigationalStatus;
         v.posAt = pos._time || nowIso;
-        if (inChile(v.lat, v.lon)) v.lastChileAt = v.posAt;
+        noteStop(v);
       }
       v.lastSeen = [v.posAt, v.staticAt].filter(Boolean).sort().pop();
       updateVoyage(v, nowIso);
@@ -173,7 +173,7 @@
       if (r.posAt && r.lat != null && (!v.posAt || r.posAt > v.posAt)) {
         Object.assign(v, { lat: round(r.lat, 4), lon: round(r.lon, 4), sog: r.sog, cog: r.cog, navStatus: r.navStatus,
           posAt: r.posAt, posSource: r.source });
-        if (inChile(v.lat, v.lon)) v.lastChileAt = v.posAt;
+        noteStop(v);
         changed = true;
       }
       const stAt = r.staticAt || r.posAt;
@@ -199,6 +199,14 @@
     return used;
   }
 
+  // Remember where and when the vessel was last seen stopped (in port or at anchor), in any country,
+  // and when it was last on the Chilean coast. Departure is inferred from these.
+  function noteStop(v) {
+    if (inChile(v.lat, v.lon)) v.lastChileAt = v.posAt;
+    const stopped = (v.sog != null && v.sog < 1.5) || v.navStatus === 1 || v.navStatus === 5;
+    if (stopped) { v.lastStopAt = v.posAt; v.lastStopLat = v.lat; v.lastStopLon = v.lon; }
+  }
+
   // A voyage = one trip to one China port. Tracks first ETA, estimated departure and arrival.
   function updateVoyage(v, nowIso) {
     if (v.destPort) {
@@ -214,10 +222,22 @@
     }
     const voy = v.voyage;
     if (!voy) return;
-    // Departure: last time it was seen on the Chilean coast, once it is seen outside it.
-    if (!voy.departedAt && v.lastChileAt && v.lat != null && !inChile(v.lat, v.lon) && v.posAt > v.lastChileAt) {
-      voy.departedAt = v.lastChileAt;
-      voy.departedEstimated = true;
+    // Departure, from any port: the last time it was seen stopped (or on the Chilean coast), once it is
+    // seen under way again. A stop inside the destination port does not count.
+    if (!voy.departedAt && v.lat != null && v.posAt) {
+      const moving = v.sog != null && v.sog >= 3 && v.navStatus !== 1 && v.navStatus !== 5;
+      const stopOk = v.lastStopAt && v.posAt > v.lastStopAt && moving &&
+        !(PORTS[voy.port] && distanceKm(v.lastStopLat, v.lastStopLon, PORTS[voy.port].lat, PORTS[voy.port].lon) <= PORTS[voy.port].radiusKm);
+      const chileOk = v.lastChileAt && !inChile(v.lat, v.lon) && v.posAt > v.lastChileAt;
+      const fromStop = stopOk ? v.lastStopAt : null;
+      const fromChile = chileOk ? v.lastChileAt : null;
+      const at = [fromStop, fromChile].filter(Boolean).sort().pop();
+      if (at) {
+        voy.departedAt = at;
+        voy.departedEstimated = true;
+        if (at === fromStop) { voy.originLat = v.lastStopLat; voy.originLon = v.lastStopLon; }
+        else { voy.originLat = CHILE_REF.lat; voy.originLon = CHILE_REF.lon; }
+      }
     }
     if (!voy.arrivedAt && isAtPort(voy.port, v.lat, v.lon, v.sog, v.navStatus) &&
         (!voy.departedAt || v.posAt > voy.departedAt)) {
@@ -248,8 +268,9 @@
     else if (departed && eta && Date.parse(eta) > Date.parse(departed)) {
       progress = clamp((nowMs - Date.parse(departed)) / (Date.parse(eta) - Date.parse(departed)), 0, 0.99);
       progressMode = 'time';
-    } else if (v && v.lat != null && port && PORTS[port] && !inChile(v.lat, v.lon)) {
-      const total = distanceKm(CHILE_REF.lat, CHILE_REF.lon, PORTS[port].lat, PORTS[port].lon);
+    } else if (v && v.lat != null && port && PORTS[port] && !inChile(v.lat, v.lon) && originOf(voy, v)) {
+      const o = originOf(voy, v);
+      const total = distanceKm(o.lat, o.lon, PORTS[port].lat, PORTS[port].lon);
       const left = distanceKm(v.lat, v.lon, PORTS[port].lat, PORTS[port].lon);
       progress = clamp(1 - left / total, 0, 0.99);
       progressMode = 'distance';
@@ -267,11 +288,20 @@
     let state = 'nodata';
     if (arrivedAt) state = 'arrived';
     else if (departed || progressMode === 'distance') state = 'transit';
+    else if (v && v.sog >= 3 && !inChile(v.lat, v.lon)) state = 'transit';
     else if (v || cr) state = 'origin';
 
     return { port, portName: port && PORTS[port] ? PORTS[port].name : null, eta, originalEta, departed,
       departedEstimated, arrivedAt, progress, progressMode, daysLeft, delayDays, lastSeen, daysSinceUpdate,
       stale, state, etaSource: crNewer && cr.eta ? cr.source : null };
+  }
+
+  // Where the voyage started, for distance-based progress: the inferred departure point, or Chile when
+  // the vessel was seen there. Unknown otherwise (no made-up progress).
+  function originOf(voy, v) {
+    if (voy && voy.originLat != null) return { lat: voy.originLat, lon: voy.originLon };
+    if (v && v.lastChileAt) return CHILE_REF;
+    return null;
   }
 
   function startOfDay(iso) { const d = new Date(iso); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
