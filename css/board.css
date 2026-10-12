@@ -198,7 +198,7 @@ body[data-design] .top-actions { justify-self: end; }
 .b-row.arrived .b-status { border-radius: 4px; padding: 2px 6px; }
 
 body[data-design="e"] .b-row.arrived { background: rgba(57,255,106,.13); animation: arrivedGlow 2.4s ease-in-out infinite; }
-body[data-design="e"] .b-row.arrived .b-status { background: #39ff6a; color: #020a04; text-shadow: none; }
+body[data-design="e"] .b-row.arrived .b-status { background: none; color: #39ff6a; text-shadow: 0 0 8px rgba(57,255,106,.9); padding: 0; }
 body[data-design="e"] .b-row.arrived .b-check { color: #020a04; background: #39ff6a; padding: 0 4px; text-shadow: none; }
 body[data-design="e"] .b-arr-note { color: #39ff6a; }
 @keyframes arrivedGlow { 50% { background: rgba(57,255,106,.24); } }
