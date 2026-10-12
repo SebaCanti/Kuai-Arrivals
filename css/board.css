@@ -225,3 +225,58 @@ body[data-design="e"] .b-status.soon { color: #39ff6a; }
 body[data-design="a"] .b-status.soon, body[data-design="d"] .b-status.soon { color: #ffd84d; }
 body[data-design="f"] .b-status.soon { color: #00ffff; }
 body[data-design="b"] .b-status.soon, body[data-design="c"] .b-status.soon { color: #ffd200; }
+
+/* Containers under the vessel name */
+.b-cntr { display: block; font-size: 12px; opacity: .85; margin-top: 3px; white-space: normal; line-height: 1.4; }
+.b-cntr .hit { background: var(--green); color: #000; padding: 0 3px; text-shadow: none; }
+body[data-design="e"] .b-cntr { font-size: 15px; color: #1f9a42; }
+.b-row.b-flash { animation: flash .5s steps(2, start) 6; }
+@keyframes flash { 50% { background: rgba(57,255,106,.35); } }
+
+/* ── Container locator: small tab on the right edge + slide-out retro-futuristic panel ── */
+.cntr-tab {
+  position: fixed; right: 0; top: 42%; z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 12px 7px; border: 1px solid var(--green, #39ff6a); border-right: none; border-radius: 10px 0 0 10px;
+  background: rgba(2,10,4,.92); color: var(--green, #39ff6a); cursor: pointer; font: 700 14px/1 VT323, ui-monospace, monospace;
+  box-shadow: 0 0 14px rgba(57,255,106,.35);
+}
+.cntr-tab span { writing-mode: vertical-rl; letter-spacing: 3px; font-size: 15px; }
+.cntr-tab:hover { box-shadow: 0 0 22px rgba(57,255,106,.6); }
+.cntr-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: min(380px, 92vw);
+  transform: translateX(105%); transition: transform .35s cubic-bezier(.2,.8,.2,1);
+  background:
+    repeating-linear-gradient(rgba(0,0,0,.25) 0 1px, transparent 1px 3px),
+    linear-gradient(rgba(57,255,106,.06) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(90deg, rgba(57,255,106,.06) 1px, transparent 1px) 0 0 / 22px 22px,
+    #020a04;
+  border-left: 2px solid #39ff6a; box-shadow: -10px 0 40px rgba(57,255,106,.25);
+  color: #39ff6a; font-family: VT323, ui-monospace, monospace; padding: 18px 16px; display: flex; flex-direction: column; gap: 14px;
+  text-shadow: 0 0 6px rgba(57,255,106,.6);
+}
+.cntr-panel.open { transform: none; }
+.cp-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #1f9a42; padding-bottom: 10px; }
+.cp-title { font-size: 24px; letter-spacing: 2px; }
+.cp-title small { font-family: "Noto Sans SC", sans-serif; font-size: 15px; opacity: .7; margin-left: 6px; }
+.cp-close { background: none; border: 1px solid #1f9a42; color: #39ff6a; width: 32px; height: 32px; font-size: 20px; cursor: pointer; }
+.cp-input { display: flex; align-items: center; gap: 8px; border: 1px solid #39ff6a; padding: 8px 10px; box-shadow: inset 0 0 12px rgba(57,255,106,.15); }
+.cp-prompt { font-size: 24px; animation: blink 1s steps(2, start) infinite; }
+.cp-input input { flex: 1; background: transparent; border: none; outline: none; color: #39ff6a; font: 24px VT323, monospace; letter-spacing: 2px; text-transform: uppercase; caret-color: #39ff6a; min-width: 0; }
+.cp-input input::placeholder { color: #1f9a42; }
+.cp-results { list-style: none; margin: 0; padding: 0; overflow: auto; display: grid; gap: 8px; }
+.cp-results li[data-goto] { border: 1px solid #0c3a1c; padding: 8px 10px; display: grid; gap: 2px; cursor: pointer; font-size: 18px; }
+.cp-results li[data-goto]:hover { border-color: #39ff6a; background: rgba(57,255,106,.08); }
+.cp-results li b { font-size: 22px; letter-spacing: 1px; }
+.cp-none { font-size: 18px; color: #1f9a42; }
+.cp-none a { color: #39ff6a; }
+.cp-foot { margin: auto 0 0; font-size: 15px; color: #1f9a42; }
+@media (max-width: 760px) {
+  .b-row { grid-template-columns: 1fr auto; grid-template-areas: "v v" "t s" "bar e"; }
+  .b-status { justify-self: end; }
+  .b-eta { align-self: center; }
+}
+@media (max-width: 760px) {
+  .b-row { grid-template-columns: auto 1fr minmax(0, 40vw); grid-template-areas: "v v v" "t e s" "bar bar bar"; }
+  .b-eta { text-align: center; }
+  .b-status { max-width: 40vw; width: 100%; text-align: right; }
+}

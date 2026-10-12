@@ -178,7 +178,7 @@ test('CSV import: Spanish headers, semicolons, Chilean dates', () => {
   const csv = '﻿Nave;Fecha Zarpe;IMO;Contenedor;Destino\nYM Fountain;05/10/2026;9278090;YMLU1234567;Nansha\n"MSC CHERRY, QUEEN";2026-09-10;;;CNSHA\nBAD SHIP;31/02/2026;;;\n';
   const { rows, errors } = L.parseVesselCsv(csv);
   assert.equal(rows.length, 3);
-  assert.deepEqual(rows[0], { name: 'YM FOUNTAIN', departed: '2026-10-05T12:00:00.000Z', imo: 9278090, bl: 'YMLU1234567', port: 'NANSHA', eta: null });
+  assert.deepEqual(rows[0], { name: 'YM FOUNTAIN', departed: '2026-10-05T12:00:00.000Z', imo: 9278090, bls: ['YMLU1234567'], port: 'NANSHA', eta: null });
   assert.equal(rows[1].name, 'MSC CHERRY, QUEEN');
   assert.equal(rows[1].port, 'SHANGHAI');
   assert.equal(rows[2].departed, null);
@@ -189,4 +189,13 @@ test('CSV import: English headers, commas, month names', () => {
   const { rows } = L.parseVesselCsv('Vessel,Departure,ETA\nMaersk Skarstind,12-Oct-2026,20 Nov 2026\n');
   assert.equal(rows[0].departed, '2026-10-12T12:00:00.000Z');
   assert.equal(rows[0].eta, '2026-11-20T12:00:00.000Z');
+});
+
+test('CSV import: template columns, ETA from "Fecha destino", several containers', () => {
+  const csv = 'Nave;Fecha Zarpe;Fecha destino;Contenedor;Puerto destino\nYM FOUNTAIN;05/10/2026;14/11/2026;YMLU1234567 / YMLU7654321;Shanghai\nYM FOUNTAIN;05/10/2026;14/11/2026;TGHU1111111;Shanghai\n';
+  const { rows } = L.parseVesselCsv(csv);
+  assert.equal(rows[0].eta, '2026-11-14T12:00:00.000Z');
+  assert.equal(rows[0].port, 'SHANGHAI');
+  assert.deepEqual(rows[0].bls, ['YMLU1234567', 'YMLU7654321']);
+  assert.deepEqual(rows[1].bls, ['TGHU1111111']);
 });

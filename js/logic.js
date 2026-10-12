@@ -305,13 +305,14 @@
   // ── CSV IMPORT ──
   // Accepts comma, semicolon or tab separated text with a header row. Column names can be in English or
   // Spanish: vessel/nave/buque, departure/zarpe/ATD, IMO, BL/contenedor, destination/destino/POD, ETA.
+  // Order matters: "Fecha destino" is the ETA column, so ETA is matched before the destination port.
   const CSV_COLS = {
     name: /^(vessel|vessel name|ship|nave|buque|barco|name|nombre|motonave|m\/n|mn)$/,
+    eta: /(^eta|fecha\s*(de\s*)?(destino|llegada|arribo)|arrival|llegada|arribo)/,
     departed: /(depart|zarpe|atd|etd|sail|salida)/,
     imo: /^imo/,
     bl: /(^bl|b\/l|bill|container|contenedor|cntr|booking)/,
-    port: /(destin|pod|port|puerto)/,
-    eta: /^eta/
+    port: /(puerto|^pod|port|^destin)/
   };
 
   function splitCsvLine(line, sep) {
@@ -375,7 +376,8 @@
       rows.push({
         name, departed,
         imo: idx.imo != null && /^\d{7}$/.test((c[idx.imo] || '').trim()) ? Number(c[idx.imo]) : null,
-        bl: idx.bl != null ? (c[idx.bl] || '').toUpperCase().replace(/\s+/g, '') || null : null,
+        // One cell can hold several containers: "MSKU1234567 / MSKU7654321"
+        bls: idx.bl != null ? (c[idx.bl] || '').toUpperCase().split(/[\s,\/|+&]+/).filter(x => x.length >= 4) : [],
         port: idx.port != null ? portFromText(c[idx.port]) : null,
         eta: idx.eta != null ? parseDate(c[idx.eta]) : null
       });

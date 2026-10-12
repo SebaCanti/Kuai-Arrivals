@@ -82,6 +82,17 @@
     </form>
   </dialog>
 
+  <button id="cntrTab" class="cntr-tab" aria-label="Find a container" aria-expanded="false">▣<span>CNTR</span></button>
+  <aside id="cntrPanel" class="cntr-panel" aria-hidden="true">
+    <div class="cp-head">
+      <span class="cp-title">CONTAINER LOCATOR <small>集装箱</small></span>
+      <button id="cntrClose" class="cp-close" aria-label="Close">×</button>
+    </div>
+    <div class="cp-input"><span class="cp-prompt">&gt;</span><input id="cntrInput" type="text" placeholder="CONTAINER NO." autocomplete="off" spellcheck="false" autocapitalize="characters"></div>
+    <ul id="cntrResults" class="cp-results"></ul>
+    <p class="cp-foot">Searches the containers / BLs saved on your vessels.</p>
+  </aside>
+
   <div id="toast" class="toast" hidden></div>
 
   <script src="js/logic.js"></script>

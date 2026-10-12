@@ -210,7 +210,7 @@
         ${vfLink(s, v)}</div>`;
     }
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
-      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}</small></span>
+      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}</small>${cntrLine(s)}</span>
       <span class="b-to">${flap((st.portName || '—').toUpperCase(), d0 + 200)}</span>
       <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
       <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
@@ -219,6 +219,48 @@
       <span class="b-status ${status.cls}">${status.html}</span>
     </div>
     ${open.has(s.id) || warn ? `<div class="b-more" data-id="${esc(s.id)}">${warn}${open.has(s.id) ? detailsHtml(s, v, st) : ''}</div>` : ''}`;
+  }
+
+  function cntrLine(s) {
+    const list = (s.bls || []).map(b => b.ref);
+    if (!list.length) return '';
+    return `<small class="b-cntr">▣ ${list.length} CNTR · ${list.map(r => `<span data-cntr="${esc(r)}">${esc(r)}</span>`).join(' · ')}</small>`;
+  }
+
+  // ── CONTAINER LOCATOR (slide-out panel) ──
+  function cntrSearch(q) {
+    const c = L.compact(q);
+    const ul = $('cntrResults');
+    if (c.length < 3) { ul.innerHTML = ''; return; }
+    const hits = [];
+    for (const s of saved) for (const b of s.bls || []) if (L.compact(b.ref).includes(c)) hits.push({ s, ref: b.ref });
+    if (!hits.length) {
+      const url = L.trackingUrl(c);
+      ul.innerHTML = `<li class="cp-none">NO MATCH IN YOUR VESSELS${url ? `<br><a href="${esc(url)}" target="_blank" rel="noopener">Track ${esc(c)} on ${esc(L.CARRIERS[L.detectCarrier(c)].name)} ↗</a>` : ''}</li>`;
+      return;
+    }
+    ul.innerHTML = hits.slice(0, 30).map(({ s, ref }) => {
+      const st = L.computeStatus(s, vesselOf(s), Date.now(), settings.staleDays);
+      const status = st.state === 'arrived' ? `ARRIVED ${L.fmtDate(st.arrivedAt)}` : st.eta ? `ETA ${L.fmtDate(st.eta)}${st.daysLeft != null && st.daysLeft >= 0 ? ` · ${st.daysLeft}D` : ''}` : 'NO ETA';
+      return `<li data-goto="${esc(s.id)}" data-ref="${esc(ref)}"><b>${esc(ref)}</b><span>${esc(s.name)} → ${esc((st.portName || '—').toUpperCase())}</span><span>${esc(status)}</span></li>`;
+    }).join('');
+  }
+
+  function cntrOpen(on) {
+    $('cntrPanel').classList.toggle('open', on);
+    $('cntrPanel').setAttribute('aria-hidden', String(!on));
+    $('cntrTab').setAttribute('aria-expanded', String(on));
+    if (on) setTimeout(() => $('cntrInput').focus(), 250);
+  }
+
+  function cntrGoto(id, ref) {
+    cntrOpen(false);
+    const row = document.querySelector(`#list [data-id="${CSS.escape(id)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.classList.add('b-flash');
+    row.querySelectorAll(`[data-cntr="${CSS.escape(ref)}"]`).forEach(el => el.classList.add('hit'));
+    setTimeout(() => { row.classList.remove('b-flash'); row.querySelectorAll('.hit').forEach(el => el.classList.remove('hit')); }, 4000);
   }
 
   function vfLink(s, v) {
@@ -455,7 +497,7 @@
       if (r.port) s.port = r.port;
       if (r.eta) s.etaManual = r.eta;
       if (!s.imo && r.imo) s.imo = r.imo;
-      if (r.bl && !(s.bls || []).some(b => b.ref === r.bl)) (s.bls = s.bls || []).push({ ref: r.bl, carrier: null });
+      for (const ref of r.bls) if (!(s.bls || []).some(b => b.ref === ref)) (s.bls = s.bls || []).push({ ref, carrier: null });
       freezeOriginal(s);
     }
     persist(); render();
@@ -516,6 +558,14 @@
     $('notifToggle').addEventListener('change', e => setNotifications(e.target.checked));
     $('staleDays').addEventListener('change', e => { settings.staleDays = Math.max(1, Number(e.target.value) || 3); persist(); render(); });
     $('exportBtn').addEventListener('click', exportList);
+    $('cntrTab').addEventListener('click', () => cntrOpen(!$('cntrPanel').classList.contains('open')));
+    $('cntrClose').addEventListener('click', () => cntrOpen(false));
+    $('cntrInput').addEventListener('input', e => cntrSearch(e.target.value));
+    $('cntrInput').addEventListener('keydown', e => {
+      if (e.key === 'Escape') cntrOpen(false);
+      if (e.key === 'Enter') { const li = $('cntrResults').querySelector('[data-goto]'); if (li) cntrGoto(li.dataset.goto, li.dataset.ref); }
+    });
+    $('cntrResults').addEventListener('click', e => { const li = e.target.closest('[data-goto]'); if (li) cntrGoto(li.dataset.goto, li.dataset.ref); });
     $('watchBtn').addEventListener('click', copyWatchlist);
     $('importFile').addEventListener('change', e => { if (e.target.files[0]) importList(e.target.files[0]); e.target.value = ''; });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fetchData(); });
