@@ -157,7 +157,7 @@ body[data-design="e"] .b-row:hover { background: rgba(57,255,106,.06); }
 body[data-design="e"] .b-vessel small { color: #1f9a42; font-size: 16px; text-shadow: none; }
 body[data-design="e"] .bar { background: #04140a; border: 1px solid #1f9a42; border-radius: 0; height: 12px; }
 body[data-design="e"] .bar > i { background: repeating-linear-gradient(90deg, #39ff6a 0 8px, #04140a 8px 10px); border-radius: 0; }
-body[data-design="e"] .b-status.late, body[data-design="e"] .b-status.stale { background: #39ff6a; color: #020a04; text-shadow: none; padding: 0 6px; }
+body[data-design="e"] .b-status.late, body[data-design="e"] .b-status.stale { color: #39ff6a; }
 body[data-design="e"] input, body[data-design="e"] select, body[data-design="e"] #search { font-family: VT323, monospace; font-size: 20px; border-radius: 0; }
 
 /* ── F · TELETEXT FLIGHT INFO (1980s TV flight-information pages) ── */
@@ -218,3 +218,10 @@ body[data-design] .board-title > span { white-space: nowrap; }
   body[data-design="e"] .clock, body[data-design="f"] .clock { font-size: 24px; padding: 0 4px; }
   body[data-design] .top-actions { gap: 4px; }
 }
+
+/* Arriving soon (2 days or less): scrolling text like ARRIVED */
+.b-status.soon .marquee > span { animation-duration: 9s; }
+body[data-design="e"] .b-status.soon { color: #b6ffc8; text-shadow: 0 0 8px rgba(57,255,106,.9); }
+body[data-design="a"] .b-status.soon, body[data-design="d"] .b-status.soon { color: #ffd84d; }
+body[data-design="f"] .b-status.soon { color: #00ffff; }
+body[data-design="b"] .b-status.soon, body[data-design="c"] .b-status.soon { color: #ffd200; }

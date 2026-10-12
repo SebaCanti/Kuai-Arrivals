@@ -180,6 +180,10 @@
     if (st.stale && st.state !== 'nodata') return { cls: 'stale', html: `NO SIGNAL ${st.daysSinceUpdate}D` };
     if (st.state === 'nodata') return { cls: 'stale', html: 'NO DATA' };
     if (st.state === 'origin') return { cls: 'origin', html: 'LOADING' };
+    if (st.daysLeft != null && st.daysLeft >= 0 && st.daysLeft <= 2) {
+      const t = 'ARRIVING SOON \u00a0·\u00a0 ARRIVING SOON \u00a0·\u00a0 ';
+      return { cls: 'soon', html: `<span class="marquee"><span>${t}${t}</span></span>` };
+    }
     if (st.delayDays > 0) return { cls: 'late', html: `DELAYED +${st.delayDays}D` };
     if (st.delayDays < 0) return { cls: 'early', html: `EARLY ${st.delayDays}D` };
     return { cls: 'ontime', html: 'ON TIME' };
