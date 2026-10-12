@@ -177,8 +177,8 @@
       const t = 'ARRIVED \u00a0·\u00a0 ARRIVED \u00a0·\u00a0 ARRIVED \u00a0·\u00a0 ';
       return { cls: 'arrived', html: `<span class="marquee"><span>${t}${t}</span></span>` };
     }
-    if (st.stale && st.state !== 'nodata') return { cls: 'stale', html: `NO SIGNAL ${st.daysSinceUpdate}D` };
-    if (st.state === 'nodata') return { cls: 'stale', html: 'NO DATA' };
+    if (st.daysSinceUpdate == null && !st.eta) return { cls: 'stale', html: 'NO DATA' };
+    if (st.stale && st.daysSinceUpdate != null) return { cls: 'stale', html: `NO SIGNAL ${st.daysSinceUpdate}D` };
     if (st.state === 'origin') return { cls: 'origin', html: 'LOADING' };
     if (st.daysLeft != null && st.daysLeft >= 0 && st.daysLeft <= 2) {
       const t = 'ARRIVING SOON \u00a0·\u00a0 ARRIVING SOON \u00a0·\u00a0 ';
@@ -422,8 +422,10 @@
   }
 
   async function importList(file) {
+    const text = await file.text();
+    if (/\.(csv|txt|tsv)$/i.test(file.name) || !/^\s*[\[{]/.test(text)) return importCsv(text);
     try {
-      const obj = JSON.parse(await file.text());
+      const obj = JSON.parse(text);
       const list = Array.isArray(obj) ? obj : obj.saved;
       if (!Array.isArray(list)) throw new Error('bad file');
       const ids = new Set(saved.map(s => s.id));
@@ -431,6 +433,35 @@
       persist(); reconcile(); render();
       toast(`Imported ${list.length} vessels`);
     } catch { toast('Could not read that file'); }
+  }
+
+  // CSV with vessel name + departure date (+ optional IMO, BL/container, destination, ETA).
+  function importCsv(text) {
+    const { rows, errors } = L.parseVesselCsv(text);
+    if (!rows.length) { toast('No vessels found in the CSV. It needs a column with the vessel name.'); return; }
+    const byImo = {}, byName = {};
+    for (const v of Object.values(data.vessels)) { if (v.imo) byImo[v.imo] = v; byName[L.compact(v.name)] = v; }
+    let added = 0, updated = 0, found = 0;
+    for (const r of rows) {
+      const v = (r.imo && byImo[r.imo]) || byName[L.compact(r.name)] || null;
+      if (v) found++;
+      let s = saved.find(x => (v && String(x.mmsi) === String(v.mmsi)) || L.compact(x.name) === L.compact(r.name));
+      if (!s) {
+        s = { id: v ? String(v.mmsi) : `m-${Date.now()}-${added}`, mmsi: v ? v.mmsi : null, imo: (v && v.imo) || r.imo || null,
+          name: v ? v.name : r.name, addedAt: new Date().toISOString(), bls: [] };
+        saved.push(s); added++;
+      } else updated++;
+      if (r.departed) s.departedManual = r.departed;
+      if (r.port) s.port = r.port;
+      if (r.eta) s.etaManual = r.eta;
+      if (!s.imo && r.imo) s.imo = r.imo;
+      if (r.bl && !(s.bls || []).some(b => b.ref === r.bl)) (s.bls = s.bls || []).push({ ref: r.bl, carrier: null });
+      freezeOriginal(s);
+    }
+    persist(); render();
+    const msg = `CSV: ${added} added, ${updated} updated, ${found} of ${rows.length} found in AIS data.`;
+    toast(errors.length ? `${msg} ${errors.length} date(s) not understood.` : msg);
+    if (errors.length) console.warn(errors.join('\n'));
   }
 
   // The daily job asks VesselFinder only for the vessels listed in data/watchlist.json in the repo.
@@ -448,7 +479,7 @@
   // ── UTIL ──
   function fmtDateTime(iso) {
     const d = new Date(iso);
-    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' });
+    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
   let toastTimer;
   function toast(msg) {
@@ -493,7 +524,7 @@
       document.body.dataset.design = design;
       document.querySelector('.board-title').innerHTML =
         `<span class="bt-en">${flap('KUAI TRACKING')}</span><span class="bt-zh">${flap('快追踪', 500)}</span>`;
-      const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' }); };
+      const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
       tick(); setInterval(tick, 10000);
     }
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

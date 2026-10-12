@@ -67,10 +67,10 @@
         <input type="number" id="staleDays" min="1" max="30" value="3">
       </label>
       <div class="row">
-        <span>Backup<small>Saved vessels live in this browser only</small></span>
+        <span>Backup / CSV<small>Saved vessels live in this browser only. Import also takes a CSV: vessel, departure date, IMO, BL, destination.</small></span>
         <span class="btns">
           <button type="button" id="exportBtn" class="btn">Export</button>
-          <label class="btn">Import<input type="file" id="importFile" accept="application/json" hidden></label>
+          <label class="btn">Import<input type="file" id="importFile" accept="application/json,.json,.csv,text/csv,.txt" hidden></label>
         </span>
       </div>
       <div class="row">

@@ -302,6 +302,87 @@
     return key && CARRIERS[key] ? `the ${CARRIERS[key].name} website` : "the carrier's website";
   }
 
+  // ── CSV IMPORT ──
+  // Accepts comma, semicolon or tab separated text with a header row. Column names can be in English or
+  // Spanish: vessel/nave/buque, departure/zarpe/ATD, IMO, BL/contenedor, destination/destino/POD, ETA.
+  const CSV_COLS = {
+    name: /^(vessel|vessel name|ship|nave|buque|barco|name|nombre|motonave|m\/n|mn)$/,
+    departed: /(depart|zarpe|atd|etd|sail|salida)/,
+    imo: /^imo/,
+    bl: /(^bl|b\/l|bill|container|contenedor|cntr|booking)/,
+    port: /(destin|pod|port|puerto)/,
+    eta: /^eta/
+  };
+
+  function splitCsvLine(line, sep) {
+    const out = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+      else if (c === '"') q = true;
+      else if (c === sep) { out.push(cur.trim()); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+
+  // Dates as DD/MM/YYYY (Chile), YYYY-MM-DD, DD-Mon-YYYY or DD Mon YYYY. Returns ISO at 12:00 UTC.
+  const MON = { JAN: 1, ENE: 1, FEB: 2, MAR: 3, APR: 4, ABR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, AGO: 8, SEP: 9, SET: 9, OCT: 10, NOV: 11, DEC: 12, DIC: 12 };
+  function parseDate(str) {
+    const t = String(str || '').trim().toUpperCase();
+    if (!t) return null;
+    let y, m, d, mm;
+    if ((mm = t.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/))) { y = +mm[1]; m = +mm[2]; d = +mm[3]; }
+    else if ((mm = t.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/))) {
+      d = +mm[1]; m = +mm[2]; y = +mm[3];
+      if (m > 12 && d <= 12) [d, m] = [m, d]; // US order
+    } else if ((mm = t.match(/^(\d{1,2})[-\s\/.]*([A-Z]{3})[A-Z]*[-\s\/.,]*(\d{2,4})/))) { d = +mm[1]; m = MON[mm[2]]; y = +mm[3]; }
+    else return null;
+    if (y < 100) y += 2000;
+    if (!m || m > 12 || !d || d > 31) return null;
+    const dt = new Date(Date.UTC(y, m - 1, d, 12));
+    return dt.getUTCMonth() === m - 1 ? dt.toISOString() : null;
+  }
+
+  function portFromText(t) {
+    const p = parseDestination(t).port;
+    if (p) return p;
+    const c = compact(t);
+    return Object.keys(PORTS).find(k => compact(PORTS[k].name) === c) || null;
+  }
+
+  function parseVesselCsv(text) {
+    const lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return { rows: [], errors: ['Empty file'] };
+    const sep = [';', '\t', ','].map(c => [c, lines[0].split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const head = splitCsvLine(lines[0], sep).map(h => h.toLowerCase().trim());
+    const idx = {};
+    for (const [key, re] of Object.entries(CSV_COLS)) {
+      const i = head.findIndex((h, j) => re.test(h) && !Object.values(idx).includes(j));
+      if (i >= 0) idx[key] = i;
+    }
+    const hasHeader = idx.name != null || idx.departed != null;
+    if (!hasHeader) { idx.name = 0; idx.departed = 1; }
+    const rows = [], errors = [];
+    lines.slice(hasHeader ? 1 : 0).forEach((line, n) => {
+      const c = splitCsvLine(line, sep);
+      const name = (c[idx.name] || '').toUpperCase().replace(/\s+/g, ' ').trim();
+      if (!name) return;
+      const rawDep = idx.departed != null ? c[idx.departed] : '';
+      const departed = parseDate(rawDep);
+      if (rawDep && !departed) errors.push(`Row ${n + 2}: could not read the date "${rawDep}"`);
+      rows.push({
+        name, departed,
+        imo: idx.imo != null && /^\d{7}$/.test((c[idx.imo] || '').trim()) ? Number(c[idx.imo]) : null,
+        bl: idx.bl != null ? (c[idx.bl] || '').toUpperCase().replace(/\s+/g, '') || null : null,
+        port: idx.port != null ? portFromText(c[idx.port]) : null,
+        eta: idx.eta != null ? parseDate(c[idx.eta]) : null
+      });
+    });
+    return { rows, errors };
+  }
+
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function fmtDate(iso) {
     if (!iso) return '—';
@@ -356,7 +437,7 @@
   }
 
   const api = { DAY, PORTS, CARRIERS, CHILE_BOX, parseDestination, inferEta, distanceKm, inChile, isAtPort,
-    mergeSnapshot, mergeExternal, updateVoyage, carrierFromName, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
+    parseVesselCsv, parseDate, mergeSnapshot, mergeExternal, updateVoyage, carrierFromName, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KuaiLogic = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -173,3 +173,20 @@ test('VesselFinder fills the gap mid-ocean and the freshest source wins', () => 
   const alerts = L.pendingAlerts([{ id: '111', mmsi: 111, name: 'MAERSK TEST' }], db, {}, { staleDays: 3 }, Date.parse('2026-11-03T12:00:00Z'));
   assert.match(alerts.find(a => a.tag.startsWith('stale')).body, /Maersk website/);
 });
+
+test('CSV import: Spanish headers, semicolons, Chilean dates', () => {
+  const csv = '﻿Nave;Fecha Zarpe;IMO;Contenedor;Destino\nYM Fountain;05/10/2026;9278090;YMLU1234567;Nansha\n"MSC CHERRY, QUEEN";2026-09-10;;;CNSHA\nBAD SHIP;31/02/2026;;;\n';
+  const { rows, errors } = L.parseVesselCsv(csv);
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows[0], { name: 'YM FOUNTAIN', departed: '2026-10-05T12:00:00.000Z', imo: 9278090, bl: 'YMLU1234567', port: 'NANSHA', eta: null });
+  assert.equal(rows[1].name, 'MSC CHERRY, QUEEN');
+  assert.equal(rows[1].port, 'SHANGHAI');
+  assert.equal(rows[2].departed, null);
+  assert.equal(errors.length, 1);
+});
+
+test('CSV import: English headers, commas, month names', () => {
+  const { rows } = L.parseVesselCsv('Vessel,Departure,ETA\nMaersk Skarstind,12-Oct-2026,20 Nov 2026\n');
+  assert.equal(rows[0].departed, '2026-10-12T12:00:00.000Z');
+  assert.equal(rows[0].eta, '2026-11-20T12:00:00.000Z');
+});
