@@ -460,15 +460,7 @@
     if (on) toast('Notifications on');
   }
 
-  // ── SETTINGS / BACKUP ──
-  function exportList() {
-    const blob = new Blob([JSON.stringify({ saved, settings }, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `kuai-vessels-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  }
+  // ── VESSEL LIST (CSV) ──
 
   async function importList(file) {
     const text = await file.text();
@@ -499,7 +491,11 @@
         s = { id: v ? String(v.mmsi) : `m-${Date.now()}-${added}`, mmsi: v ? v.mmsi : null, imo: (v && v.imo) || r.imo || null,
           name: v ? v.name : r.name, addedAt: new Date().toISOString(), bls: [] };
         saved.push(s); added++;
-      } else updated++;
+      } else {
+        updated++;
+        // Lock in the ETA the vessel had before this list, so the new one becomes the UPD ETA.
+        freezeOriginal(s);
+      }
       if (r.departed) s.departedManual = r.departed;
       if (r.port) s.port = r.port;
       if (r.eta) s.etaManual = r.eta;
@@ -508,7 +504,7 @@
       freezeOriginal(s);
     }
     persist(); render();
-    const msg = `CSV: ${added} added, ${updated} updated, ${found} of ${rows.length} found in AIS data.`;
+    const msg = `List: ${added} added, ${updated} updated, ${found} of ${rows.length} found in AIS data.`;
     toast(errors.length ? `${msg} ${errors.length} date(s) not understood.` : msg);
     if (errors.length) console.warn(errors.join('\n'));
   }
@@ -564,7 +560,6 @@
     });
     $('notifToggle').addEventListener('change', e => setNotifications(e.target.checked));
     $('staleDays').addEventListener('change', e => { settings.staleDays = Math.max(1, Number(e.target.value) || 3); persist(); render(); });
-    $('exportBtn').addEventListener('click', exportList);
     $('cntrTab').addEventListener('click', () => cntrOpen(!$('cntrPanel').classList.contains('open')));
     $('cntrClose').addEventListener('click', () => cntrOpen(false));
     $('cntrInput').addEventListener('input', e => cntrSearch(e.target.value));

@@ -67,11 +67,8 @@
         <input type="number" id="staleDays" min="1" max="30" value="3">
       </label>
       <div class="row">
-        <span>Backup / CSV<small>Saved vessels live in this browser only. Import also takes a CSV: vessel, departure date, IMO, BL, destination.</small></span>
-        <span class="btns">
-          <button type="button" id="exportBtn" class="btn">Export</button>
-          <label class="btn">Import<input type="file" id="importFile" accept="application/json,.json,.csv,text/csv,.txt" hidden></label>
-        </span>
+        <span>Vessel list (CSV)<small>Columns Nave, Fecha Zarpe, Fecha destino, Contenedor, Puerto destino. New vessels are added; vessels already saved get the new departure, port, ETA and containers. The first ETA stays as the Original ETA; later ones become the UPD ETA.</small></span>
+        <label class="btn primary" style="white-space:nowrap">Add New Vessel List<input type="file" id="importFile" accept=".csv,text/csv,.txt,application/json,.json" hidden></label>
       </div>
       <div class="row">
         <span>Always-track list<small>Vessels the daily job always keeps, even with an unknown destination. Copies your list and opens the file on GitHub to paste it.</small></span>
