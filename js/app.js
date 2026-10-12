@@ -210,7 +210,7 @@
         ${vfLink(s, v)}</div>`;
     }
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
-      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}</small>${cntrLine(s)}</span>
+      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
       <span class="b-to">${flap((st.portName || '—').toUpperCase(), d0 + 200)}</span>
       <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
       <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
@@ -221,10 +221,16 @@
     ${open.has(s.id) || warn ? `<div class="b-more" data-id="${esc(s.id)}">${warn}${open.has(s.id) ? detailsHtml(s, v, st) : ''}</div>` : ''}`;
   }
 
+  // The board shows only how many containers a vessel carries; the numbers appear when the vessel is opened.
+  function cntrCount(s) {
+    const n = (s.bls || []).length;
+    return n ? `<span class="b-ncntr">▣ ${n} CNTR</span> · ` : '';
+  }
+
   function cntrLine(s) {
     const list = (s.bls || []).map(b => b.ref);
     if (!list.length) return '';
-    return `<small class="b-cntr">▣ ${list.length} CNTR · ${list.map(r => `<span data-cntr="${esc(r)}">${esc(r)}</span>`).join(' · ')}</small>`;
+    return `<small class="b-cntr">${list.map(r => `<span data-cntr="${esc(r)}">${esc(r)}</span>`).join(' · ')}</small>`;
   }
 
   // ── CONTAINER LOCATOR (slide-out panel) ──
@@ -255,6 +261,7 @@
 
   function cntrGoto(id, ref) {
     cntrOpen(false);
+    if (!open.has(id)) { open.add(id); render(); }
     const row = document.querySelector(`#list [data-id="${CSS.escape(id)}"]`);
     if (!row) return;
     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
