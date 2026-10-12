@@ -1,5 +1,5 @@
 // Kuai Tracking — Service Worker
-const CACHE_NAME = 'kuai-v6';
+const CACHE_NAME = 'kuai-v7';
 const DATA_URL = 'data/vessels.json';
 
 const STATIC_ASSETS = [
@@ -19,7 +19,7 @@ importScripts('js/logic.js');
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => Promise.all(STATIC_ASSETS.map(u => cache.add(u).catch(err => console.warn('precache fail', u, err)))))
+      .then(cache => Promise.all(STATIC_ASSETS.map(u => cache.add(new Request(u, { cache: 'reload' })).catch(err => console.warn('precache fail', u, err)))))
       .then(() => self.skipWaiting())
   );
 });
@@ -50,20 +50,20 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // App shell: cache first, refreshed in the background. Rebuild responses so iOS never sees a redirect.
+  // App shell: network first so new versions show on the next load; cached copy when offline.
+  // Rebuild cached responses so iOS never sees a redirect.
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then(cached => {
-      const network = fetch(event.request).then(res => {
-        if (res.ok && res.type === 'basic' && !res.redirected) {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(event.request, copy));
-        }
+    fetch(event.request, { cache: 'no-cache' }).then(res => {
+      if (res.ok && res.type === 'basic' && !res.redirected) {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then(c => c.put(event.request, copy));
         return res;
-      }).catch(() => cached);
-      if (!cached) return network;
-      if (!cached.redirected) return cached;
+      }
+      return res.redirected ? res.blob().then(b => new Response(b, { headers: res.headers, status: res.status })) : res;
+    }).catch(() => caches.match(event.request, { ignoreSearch: true }).then(cached => {
+      if (!cached || !cached.redirected) return cached;
       return cached.blob().then(b => new Response(b, { headers: cached.headers, status: cached.status }));
-    })
+    }))
   );
 });
 
