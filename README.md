@@ -5,6 +5,7 @@ PWA para seguir naves de Chile a China (Shanghai, Tianjin, Hong Kong, Nansha, Sh
 ## Cómo funciona
 
 - **App** (`index.html`, `js/`, `css/`, `sw.js`): HTML/JS sin build. La lista de naves, BL y fechas manuales se guardan en `localStorage` (usa Export/Import en Settings para pasarla a otro equipo).
+- **ETA oficial de navieras** (`scripts/carriers.mjs`): con el secreto `MAERSK_CONSUMER_KEY` y la lista privada `KUAI_CONTAINERS` (un contenedor por línea, `CONTENEDOR;NAVE`), cada hora se consulta la API de Maersk y se publica solo el ETA por nave, nunca los contenedores.
 - **Datos** (`data/vessels.json`): los genera cada hora el workflow `.github/workflows/update-and-deploy.yml`, que escucha AISStream.io 40 minutos y guarda las naves de la ruta Chile → China y toda nave de 150 m o más. Después publica el sitio en GitHub Pages.
 - **VesselFinder (opcional, pagado)**: si existe el secret `VESSELFINDER_API_KEY`, el job también consulta la API de VesselFinder (con satélite) para las naves de `data/watchlist.json` y se queda con el dato más reciente de cada fuente. En la app, Settings → *Copy list* copia tus naves para pegarlas en ese archivo.
 - **Sin datos por 3 días** (configurable): la tarjeta y la notificación te mandan a la página de tracking de la naviera (detectada por el nombre de la nave, por el BL o elegida en Details).

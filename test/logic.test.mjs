@@ -207,3 +207,53 @@ test('a big ship with an odd or empty destination is still kept', () => {
   L.mergeSnapshot(db, statics, new Map(), '2026-10-12T09:00:00Z', []);
   assert.deepEqual(Object.keys(db.vessels), ['333']);
 });
+
+// DCSA Track & Trace events as carriers (Maersk) return them: San Antonio → Shanghai.
+const dcsa = [
+  { eventType: 'TRANSPORT', eventClassifierCode: 'ACT', transportEventTypeCode: 'DEPA', eventDateTime: '2026-10-01T10:00:00Z',
+    transportCall: { UNLocationCode: 'CLSAI', vessel: { vesselName: 'MAERSK TEST' } } },
+  { eventType: 'TRANSPORT', eventClassifierCode: 'PLN', transportEventTypeCode: 'ARRI', eventDateTime: '2026-11-10T08:00:00Z',
+    eventCreatedDateTime: '2026-09-20T00:00:00Z', transportCall: { UNLocationCode: 'CNSHA', vessel: { vesselName: 'MAERSK TEST' } } },
+  { eventType: 'TRANSPORT', eventClassifierCode: 'EST', transportEventTypeCode: 'ARRI', eventDateTime: '2026-11-13T08:00:00Z',
+    eventCreatedDateTime: '2026-10-10T00:00:00Z', transportCall: { UNLocationCode: 'CNSHA', vessel: { vesselName: 'MAERSK TEST' } } },
+  { eventType: 'EQUIPMENT', equipmentEventTypeCode: 'LOAD', eventClassifierCode: 'ACT', eventDateTime: '2026-09-30T10:00:00Z' }
+];
+
+test('carrier events give the final port, estimated ETA and departure', () => {
+  const info = L.parseCarrierEvents({ events: dcsa }, 'Maersk');
+  assert.equal(info.port, 'SHANGHAI');
+  assert.equal(info.eta, '2026-11-13T08:00:00.000Z');
+  assert.equal(info.arrivedAt, null);
+  assert.equal(info.departedAt, '2026-10-01T10:00:00.000Z');
+  const arrived = L.parseCarrierEvents([...dcsa, { eventType: 'TRANSPORT', eventClassifierCode: 'ACT', transportEventTypeCode: 'ARRI',
+    eventDateTime: '2026-11-14T02:00:00Z', transportCall: { UNLocationCode: 'CNSHA' } }], 'Maersk');
+  assert.equal(arrived.arrivedAt, '2026-11-14T02:00:00.000Z');
+});
+
+test('carrier ETA wins over AIS and an older manual ETA, not over a newer one', () => {
+  const carrierInfo = { source: 'Maersk', eta: '2026-11-13T08:00:00.000Z', port: 'SHANGHAI', at: '2026-10-12T10:00:00Z' };
+  const base = { name: 'MAERSK TEST', originalEta: '2026-11-10T12:00:00.000Z', carrierInfo };
+  const now = Date.parse('2026-10-12T12:00:00Z');
+  let st = L.computeStatus(Object.assign({}, base, { etaManual: '2026-11-10T12:00:00.000Z', etaManualAt: '2026-10-01T00:00:00Z' }), null, now, 3);
+  assert.equal(st.eta, '2026-11-13T08:00:00.000Z');
+  assert.equal(st.etaSource, 'Maersk');
+  assert.equal(st.delayDays, 3);
+  assert.equal(st.stale, false);
+  st = L.computeStatus(Object.assign({}, base, { etaManual: '2026-11-20T12:00:00.000Z', etaManualAt: '2026-10-12T11:00:00Z' }), null, now, 3);
+  assert.equal(st.eta, '2026-11-20T12:00:00.000Z');
+});
+
+test('the hourly job turns the private container list into ETAs per vessel, without printing containers', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'kuai-'));
+  writeFileSync(path.join(dir, 'vessels.json'), JSON.stringify({ updatedAt: null, vessels: {} }));
+  writeFileSync(path.join(dir, 'watchlist.json'), '[]');
+  writeFileSync(path.join(dir, 'fx.jsonl'), '');
+  writeFileSync(path.join(dir, 'maersk.json'), JSON.stringify(dcsa));
+  const log = execFileSync('node', ['scripts/update-ais.mjs'], { encoding: 'utf8', env: { ...process.env, DATA_DIR: dir,
+    AIS_FIXTURE: path.join(dir, 'fx.jsonl'), CARRIER_FIXTURE: path.join(dir, 'maersk.json'), NOW: '2026-10-12T10:00:00Z',
+    KUAI_CONTAINERS: 'MSKU1234567;Maersk Test\nMSCU7654321;MSC OTHER\njunk line' } });
+  const db = JSON.parse(readFileSync(path.join(dir, 'vessels.json'), 'utf8'));
+  assert.equal(db.carrier.MAERSKTEST.eta, '2026-11-13T08:00:00.000Z');
+  assert.equal(db.carrier.MAERSKTEST.port, 'SHANGHAI');
+  assert.ok(!/MSKU|MSCU/.test(log + JSON.stringify(db)));
+});

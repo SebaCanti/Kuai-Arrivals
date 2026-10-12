@@ -34,12 +34,15 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Pull vessel data (AISStream + VesselFinder)
+      - name: Pull vessel data (AISStream, VesselFinder, carrier APIs)
         env:
           AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
           VESSELFINDER_API_KEY: ${{ secrets.VESSELFINDER_API_KEY }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '' }}
           LISTEN_MINUTES: 40
+          KUAI_CONTAINERS: ${{ secrets.KUAI_CONTAINERS }}
+          MAERSK_CONSUMER_KEY: ${{ secrets.MAERSK_CONSUMER_KEY }}
+          MAERSK_CLIENT_SECRET: ${{ secrets.MAERSK_CLIENT_SECRET }}
         run: node scripts/update-ais.mjs
       - name: Commit vessels.json
         run: |

@@ -54,6 +54,9 @@
     const byName = {};
     for (const v of Object.values(data.vessels)) byName[L.compact(v.name)] = v;
     for (const s of saved) {
+      // Official carrier ETA for this vessel's containers; the last one received is kept.
+      const cr = data.carrier && data.carrier[L.compact(s.name)];
+      if (cr && (!s.carrierInfo || cr.at >= s.carrierInfo.at)) s.carrierInfo = cr;
       if (!s.mmsi) {
         const v = byName[L.compact(s.name)];
         if (v) { s.mmsi = v.mmsi; s.imo = v.imo; }
@@ -212,7 +215,7 @@
         ${vfLink(s, v)}</div>`;
     }
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
-      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
+      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
       <span class="b-to">${flap((st.portName || '—').toUpperCase(), d0 + 200)}</span>
       <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
       <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
@@ -414,6 +417,7 @@
     if (f === 'port') { s.port = el.value || null; s.originalEta = null; freezeOriginal(s); }
     else if (f === 'carrier') s.carrier = el.value || null;
     else s[f] = el.value ? `${el.value}T12:00:00.000Z` : null;
+    if (f === 'etaManual') s.etaManualAt = new Date().toISOString();
     if (f === 'originalEta' && !el.value) freezeOriginal(s);
     persist();
     render();
@@ -500,7 +504,7 @@
       }
       if (r.departed) s.departedManual = r.departed;
       if (r.port) s.port = r.port;
-      if (r.eta) s.etaManual = r.eta;
+      if (r.eta) { s.etaManual = r.eta; s.etaManualAt = new Date().toISOString(); }
       if (!s.imo && r.imo) s.imo = r.imo;
       for (const ref of r.bls) if (!(s.bls || []).some(b => b.ref === ref)) (s.bls = s.bls || []).push({ ref, carrier: null });
       freezeOriginal(s);

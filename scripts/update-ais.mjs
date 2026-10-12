@@ -14,6 +14,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { updateCarriers } from './carriers.mjs';
 
 const require = createRequire(import.meta.url);
 const L = require('../js/logic.js');
@@ -174,7 +175,7 @@ async function main() {
   } else if (process.env.AISSTREAM_API_KEY) {
     console.log(`Listening to AISStream for ${LISTEN_MS / 60000} min…`);
     messages = await listenLive(statics, positions, process.env.AISSTREAM_API_KEY);
-  } else if (!process.env.VESSELFINDER_API_KEY) {
+  } else if (!process.env.VESSELFINDER_API_KEY && !process.env.CARRIER_FIXTURE) {
     throw new Error('Set AISSTREAM_API_KEY and/or VESSELFINDER_API_KEY.');
   }
 
@@ -206,6 +207,9 @@ async function main() {
       process.exitCode = 0;
     }
   }
+
+  // Official carrier ETAs for the containers shared from the app. A failure must not lose the AIS update.
+  try { await updateCarriers(db, nowIso); } catch (e) { console.error(`Carriers skipped: ${e.message}`); }
 
   db.updatedAt = nowIso;
   await writeFile(DB_PATH, JSON.stringify(db));

@@ -232,11 +232,15 @@
   function computeStatus(saved, v, nowMs, staleDays) {
     nowMs = nowMs || Date.now();
     const voy = v && v.voyage && (!saved.port || v.voyage.port === saved.port) ? v.voyage : null;
-    const port = saved.port || (voy && voy.port) || (v && v.destPort) || null;
-    const eta = saved.etaManual || (v && v.destPort === port ? v.eta : null) || (voy && voy.firstEta) || null;
-    const departed = saved.departedManual || (voy && voy.departedAt) || null;
-    const departedEstimated = !saved.departedManual && !!(voy && voy.departedEstimated);
-    const arrivedAt = saved.arrivedManual || (voy && voy.arrivedAt) || null;
+    // Carrier API data (official, per container) beats the crew-typed AIS ETA, and beats a manual ETA
+    // entered before the carrier last reported.
+    const cr = saved.carrierInfo || null;
+    const crNewer = cr && cr.at && (!saved.etaManual || !saved.etaManualAt || cr.at > saved.etaManualAt);
+    const port = saved.port || (cr && cr.port) || (voy && voy.port) || (v && v.destPort) || null;
+    const eta = (crNewer && cr.eta) || saved.etaManual || (cr && cr.eta) || (v && v.destPort === port ? v.eta : null) || (voy && voy.firstEta) || null;
+    const departed = saved.departedManual || (cr && cr.departedAt) || (voy && voy.departedAt) || null;
+    const departedEstimated = !saved.departedManual && !(cr && cr.departedAt) && !!(voy && voy.departedEstimated);
+    const arrivedAt = saved.arrivedManual || (cr && cr.arrivedAt) || (voy && voy.arrivedAt) || null;
     const originalEta = saved.originalEta || (voy && voy.firstEta) || eta;
 
     let progress = null, progressMode = null;
@@ -256,18 +260,18 @@
     const daysLeft = !arrivedAt && eta ? Math.ceil((Date.parse(eta) - nowMs) / DAY) : null;
     const ref = arrivedAt || eta;
     const delayDays = ref && originalEta ? Math.round((startOfDay(ref) - startOfDay(originalEta)) / DAY) : null;
-    const lastSeen = v ? v.lastSeen : null;
+    const lastSeen = [v && v.lastSeen, cr && cr.at].filter(Boolean).sort().pop() || null;
     const daysSinceUpdate = lastSeen ? Math.floor((nowMs - Date.parse(lastSeen)) / DAY) : null;
-    const stale = !arrivedAt && (v ? daysSinceUpdate >= (staleDays || 3) : true);
+    const stale = !arrivedAt && (lastSeen ? daysSinceUpdate >= (staleDays || 3) : true);
 
     let state = 'nodata';
     if (arrivedAt) state = 'arrived';
     else if (departed || progressMode === 'distance') state = 'transit';
-    else if (v) state = 'origin';
+    else if (v || cr) state = 'origin';
 
     return { port, portName: port && PORTS[port] ? PORTS[port].name : null, eta, originalEta, departed,
       departedEstimated, arrivedAt, progress, progressMode, daysLeft, delayDays, lastSeen, daysSinceUpdate,
-      stale, state };
+      stale, state, etaSource: crNewer && cr.eta ? cr.source : null };
   }
 
   function startOfDay(iso) { const d = new Date(iso); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
@@ -443,7 +447,45 @@
     return key && CARRIERS[key] ? CARRIERS[key].url(compact(ref)) : null;
   }
 
-  const api = { DAY, PORTS, CARRIERS, CHILE_BOX, parseDestination, inferEta, distanceKm, inChile, isAtPort,
+  // ── CARRIER TRACK & TRACE (DCSA events, e.g. Maersk) ──
+  function portFromLocode(code) {
+    const c = compact(code);
+    if (!c) return null;
+    for (const key of Object.keys(PORTS)) if (PORTS[key].codes.includes(c)) return key;
+    return null;
+  }
+
+  // Turns a DCSA Track & Trace response (a list of events, or { events: [...] }) into the container's
+  // final port of discharge, its ETA (estimated > planned) or actual arrival, and the departure from origin.
+  function parseCarrierEvents(json, source) {
+    const list = Array.isArray(json) ? json : json && (json.events || json.data || json.Events) || [];
+    const loc = e => { const tc = e.transportCall || {}; return compact(tc.UNLocationCode || (tc.location || {}).UNLocationCode || (e.eventLocation || {}).UNLocationCode || ''); };
+    const when = e => e.eventDateTime || e.eventDatetime || null;
+    const transport = list.filter(e => e && (e.eventType === 'TRANSPORT' || e.transportEventTypeCode) && when(e));
+    if (!transport.length) return null;
+    const arrivals = transport.filter(e => e.transportEventTypeCode === 'ARRI' && loc(e));
+    const departures = transport.filter(e => e.transportEventTypeCode === 'DEPA' && loc(e));
+    if (!arrivals.length) return null;
+    // The final port is the arrival with the latest time (planned or estimated).
+    const finalLoc = loc(arrivals.slice().sort((a, b) => Date.parse(when(a)) - Date.parse(when(b))).pop());
+    const atFinal = arrivals.filter(e => loc(e) === finalLoc);
+    const pick = code => atFinal.filter(e => e.eventClassifierCode === code)
+      .sort((a, b) => Date.parse(a.eventCreatedDateTime || 0) - Date.parse(b.eventCreatedDateTime || 0)).pop();
+    const act = pick('ACT'), est = pick('EST'), pln = pick('PLN');
+    const firstDep = departures.filter(e => e.eventClassifierCode === 'ACT').sort((a, b) => Date.parse(when(a)) - Date.parse(when(b)))[0];
+    const vessel = ((act || est || pln || {}).transportCall || {}).vessel || {};
+    return {
+      source: source || 'Carrier',
+      locode: finalLoc,
+      port: portFromLocode(finalLoc),
+      eta: new Date(when(est || pln || act)).toISOString(),
+      arrivedAt: act ? new Date(when(act)).toISOString() : null,
+      departedAt: firstDep ? new Date(when(firstDep)).toISOString() : null,
+      lastVessel: vessel.vesselName || null
+    };
+  }
+
+  const api = { DAY, portFromLocode, parseCarrierEvents, PORTS, CARRIERS, CHILE_BOX, parseDestination, inferEta, distanceKm, inChile, isAtPort,
     parseVesselCsv, parseDate, mergeSnapshot, mergeExternal, updateVoyage, carrierFromName, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KuaiLogic = api;
