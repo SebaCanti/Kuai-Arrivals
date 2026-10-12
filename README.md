@@ -1,5 +1,7 @@
 # Kuai Arrivals
 
+Web: https://sebacanti.github.io/Kuai-Arrivals/
+
 PWA para seguir naves de Chile a China (Shanghai, Tianjin, Hong Kong, Nansha, Shenzhen): días restantes, barra de progreso zarpe → ETA, retraso contra el ETA original, alerta de llegada y aviso cuando una nave lleva días sin datos.
 
 ## Cómo funciona
