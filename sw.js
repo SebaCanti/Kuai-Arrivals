@@ -1,11 +1,12 @@
 // Kuai Tracking — Service Worker
-const CACHE_NAME = 'kuai-v2';
+const CACHE_NAME = 'kuai-v3';
 const DATA_URL = 'data/vessels.json';
 
 const STATIC_ASSETS = [
   './',
   './index.html',
   './css/app.css',
+  './css/board.css',
   './js/logic.js',
   './js/app.js',
   './manifest.json',

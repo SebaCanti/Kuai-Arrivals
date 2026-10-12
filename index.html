@@ -12,7 +12,10 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Inter:wght@400;600;800&family=Share+Tech+Mono&display=swap">
   <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/board.css">
 </head>
 <body>
   <header class="top">
@@ -23,7 +26,9 @@
         <p class="sub" id="dataStamp">Loading data…</p>
       </div>
     </div>
+    <div class="board-title"><span class="bt-en">Arrivals</span><span class="bt-zh">到达</span></div>
     <div class="top-actions">
+      <span id="clock" class="clock"></span>
       <button class="icon-btn" id="refreshBtn" title="Refresh data" aria-label="Refresh data">⟳</button>
       <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">⚙</button>
     </div>
@@ -69,7 +74,7 @@
         </span>
       </div>
       <div class="row">
-        <span>VesselFinder watchlist<small>Vessels the daily job checks by satellite (paid API). Copies your list and opens the file on GitHub.</small></span>
+        <span>Always-track list<small>Vessels the daily job always keeps, even with an unknown destination. Copies your list and opens the file on GitHub to paste it.</small></span>
         <button type="button" id="watchBtn" class="btn">Copy list</button>
       </div>
       <p class="note">ETA and destination come from AIS (entered by each vessel's crew) and are refreshed daily at 6:00 AM Chile time from AISStream and, if set up, VesselFinder; the newest data wins. After the days set above without an update, the card links to the carrier's tracking page.</p>

@@ -101,7 +101,9 @@
         const nearChile = pos && inChile(pos.Latitude, pos.Longitude) && cargo && length >= 100;
         const watched = watchSet.has(compact(name)) || watchSet.has(String(mmsi)) ||
           (st && st.ImoNumber && watchSet.has(String(st.ImoNumber)));
-        if (!(dest.port || (dest.chile && cargo) || nearChile || watched)) continue;
+        // Large cargo/container ships anywhere are kept too, so they can be found in search before they head for China.
+        const bigCargo = cargo && length >= 150;
+        if (!(dest.port || (dest.chile && cargo) || nearChile || watched || bigCargo)) continue;
         if (!name) continue;
         v = vessels[mmsi] = { mmsi: Number(mmsi), name, etaHistory: [], firstSeen: nowIso };
         added++;

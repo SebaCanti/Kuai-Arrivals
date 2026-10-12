@@ -146,7 +146,78 @@
     $('savedCount').textContent = saved.length ? `(${saved.length})` : '';
     $('empty').hidden = saved.length > 0;
     $('sortSel').value = settings.sort;
-    $('list').innerHTML = sorted().map(cardHtml).join('');
+    if (design) {
+      $('list').innerHTML = boardHeadHtml() + sorted().map(boardRowHtml).join('');
+    } else {
+      $('list').innerHTML = sorted().map(cardHtml).join('');
+    }
+  }
+
+  // ── ARRIVALS BOARD (airport-style designs a / b / c) ──
+  const design = (() => {
+    try {
+      const q = new URLSearchParams(location.search).get('design');
+      if (q === 'off') { localStorage.removeItem('kuai.design'); return null; }
+      if (/^[abc]$/.test(q || '')) { localStorage.setItem('kuai.design', q); return q; }
+      return localStorage.getItem('kuai.design') || null;
+    } catch { return null; }
+  })();
+
+  // Split each character into a tile for the split-flap design.
+  function flap(text, delayBase = 0) {
+    if (design !== 'a') return esc(text);
+    return [...String(text)].map((c, i) =>
+      `<span class="fl" style="animation-delay:${delayBase + i * 35}ms">${c === ' ' ? '&nbsp;' : esc(c)}</span>`).join('');
+  }
+
+  function boardStatus(st) {
+    if (st.state === 'arrived') {
+      const t = 'ARRIVED \u00a0·\u00a0 ARRIVED \u00a0·\u00a0 ARRIVED \u00a0·\u00a0 ';
+      return { cls: 'arrived', html: `<span class="marquee"><span>${t}${t}</span></span>` };
+    }
+    if (st.stale && st.state !== 'nodata') return { cls: 'stale', html: `NO SIGNAL ${st.daysSinceUpdate}D` };
+    if (st.state === 'nodata') return { cls: 'stale', html: 'NO DATA' };
+    if (st.state === 'origin') return { cls: 'origin', html: 'LOADING' };
+    if (st.delayDays > 0) return { cls: 'late', html: `DELAYED +${st.delayDays}D` };
+    if (st.delayDays < 0) return { cls: 'early', html: `EARLY ${st.delayDays}D` };
+    return { cls: 'ontime', html: 'ON TIME' };
+  }
+
+  function boardHeadHtml() {
+    return `<div class="b-head" role="row">
+      <span>Vessel</span><span>To</span><span>Departed</span><span>Voyage</span><span>ETA</span><span>Days</span><span>Status</span></div>`;
+  }
+
+  function boardRowHtml({ s, v, st }, idx) {
+    const pct = Math.round((st.progress || 0) * 100);
+    const status = boardStatus(st);
+    const ck = carrierKey(s);
+    const days = st.state === 'arrived' ? '—' : st.daysLeft == null ? '—' : st.daysLeft < 0 ? `+${-st.daysLeft}` : String(st.daysLeft);
+    const eta = st.arrivedAt ? L.fmtDate(st.arrivedAt) : L.fmtDate(st.eta);
+    const d0 = idx * 120;
+    let warn = '';
+    if (st.stale) {
+      const links = (s.bls || []).map(b => blLink(b)).filter(Boolean).join(' · ');
+      const home = ck ? `<a href="${esc(L.CARRIERS[ck].home)}" target="_blank" rel="noopener">${esc(L.CARRIERS[ck].name)} tracking ↗</a>` : '';
+      const what = v ? `No update for ${st.daysSinceUpdate} days.` : 'Not found in the AIS data yet.';
+      warn = `<div class="warn">⚠ ${what} ${links ? 'Check the ETA with your BL: ' + links : home ? 'Check the ETA on ' + home + ' with a BL or container number.' : 'Set the carrier and add a BL in Details.'}
+        ${vfLink(s, v)}</div>`;
+    }
+    return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
+      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}</small></span>
+      <span class="b-to">${flap((st.portName || '—').toUpperCase(), d0 + 200)}</span>
+      <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
+      <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
+      <span class="b-eta">${flap(eta.toUpperCase(), d0 + 400)}</span>
+      <span class="b-days">${flap(days, d0 + 450)}</span>
+      <span class="b-status ${status.cls}">${status.html}</span>
+    </div>
+    ${open.has(s.id) || warn ? `<div class="b-more" data-id="${esc(s.id)}">${warn}${open.has(s.id) ? detailsHtml(s, v, st) : ''}</div>` : ''}`;
+  }
+
+  function vfLink(s, v) {
+    const url = v ? `https://www.vesselfinder.com/vessels/details/${v.imo || v.mmsi}` : `https://www.vesselfinder.com/vessels?name=${encodeURIComponent(s.name)}`;
+    return `<a href="${esc(url)}" target="_blank" rel="noopener">VesselFinder ↗</a>`;
   }
 
   function headline(st) {
@@ -256,7 +327,9 @@
   function onListClick(e) {
     const btn = e.target.closest('[data-act]');
     if (!btn) return;
-    const card = btn.closest('.card');
+    const card = btn.closest('[data-id]');
+    if (!card) return;
+    if (btn.dataset.act === 'toggle' && e.target.closest('a, button:not([data-act=toggle]), input, select')) return;
     const s = saved.find(x => x.id === card.dataset.id);
     if (!s) return;
     const act = btn.dataset.act;
@@ -279,7 +352,7 @@
   function onListChange(e) {
     const el = e.target.closest('[data-field]');
     if (!el) return;
-    const s = saved.find(x => x.id === el.closest('.card').dataset.id);
+    const s = saved.find(x => x.id === el.closest('[data-id]').dataset.id);
     const f = el.dataset.field;
     if (f === 'port') { s.port = el.value || null; s.originalEta = null; freezeOriginal(s); }
     else if (f === 'carrier') s.carrier = el.value || null;
@@ -410,6 +483,11 @@
     $('importFile').addEventListener('change', e => { if (e.target.files[0]) importList(e.target.files[0]); e.target.value = ''; });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fetchData(); });
 
+    if (design) {
+      document.body.dataset.design = design;
+      const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' }); };
+      tick(); setInterval(tick, 10000);
+    }
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
     render();
     fetchData();
