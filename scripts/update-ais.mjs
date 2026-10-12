@@ -57,12 +57,13 @@ function collect(msg, statics, positions) {
   }
 }
 
-async function listenLive(statics, positions, apiKey) {
+// One websocket session. Resolves with the number of messages when the server closes it or `ms` runs out.
+function listenOnce(statics, positions, apiKey, ms) {
   let count = 0;
-  await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const ws = new WebSocket('wss://stream.aisstream.io/v0/stream');
     ws.binaryType = 'arraybuffer';
-    const timer = setTimeout(() => { ws.close(); }, LISTEN_MS);
+    const timer = setTimeout(() => { ws.close(); }, ms);
     ws.onopen = () => {
       ws.send(JSON.stringify({
         APIKey: apiKey,
@@ -78,11 +79,34 @@ async function listenLive(statics, positions, apiKey) {
       count++;
       collect(msg, statics, positions);
     };
-    ws.onerror = e => { clearTimeout(timer); reject(new Error(`WebSocket error: ${e.message || 'connection failed'}`)); };
-    ws.onclose = () => { clearTimeout(timer); resolve(); };
+    ws.onerror = e => {
+      clearTimeout(timer);
+      if (count) resolve(count); // dropped mid-stream: keep what we got and reconnect
+      else reject(new Error(`WebSocket error: ${e.message || 'connection failed'}`));
+    };
+    ws.onclose = () => { clearTimeout(timer); resolve(count); };
   });
-  if (count === 0) throw new Error('AISStream sent no messages (check the API key).');
-  return count;
+}
+
+// AISStream drops long connections now and then, so reconnect until the listening time is used up.
+async function listenLive(statics, positions, apiKey) {
+  const deadline = Date.now() + LISTEN_MS;
+  let total = 0, sessions = 0;
+  while (Date.now() < deadline - 15000 && sessions < 15) {
+    sessions++;
+    try {
+      total += await listenOnce(statics, positions, apiKey, deadline - Date.now());
+    } catch (e) {
+      if (/AISStream:/.test(e.message) || (sessions === 1 && total === 0)) throw e;
+      console.log(`Connection ${sessions} failed (${e.message}), retrying…`);
+    }
+    if (Date.now() < deadline - 15000) {
+      console.log(`Connection ${sessions} closed after ${total} messages, reconnecting…`);
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+  if (total === 0) throw new Error('AISStream sent no messages (check the API key).');
+  return total;
 }
 
 async function replayFixture(file, statics, positions) {
@@ -159,6 +183,15 @@ async function main() {
     messages = await listenLive(statics, positions, process.env.AISSTREAM_API_KEY);
   } else if (!process.env.VESSELFINDER_API_KEY) {
     throw new Error('Set AISSTREAM_API_KEY and/or VESSELFINDER_API_KEY.');
+  }
+
+  if (positions.size) {
+    let chile = 0, china = 0;
+    for (const p of positions.values()) {
+      if (L.inChile(p.Latitude, p.Longitude)) chile++;
+      if (p.Latitude > 18 && p.Latitude < 42 && p.Longitude > 108 && p.Longitude < 126) china++;
+    }
+    console.log(`Coverage: ${chile} vessels heard on the Chilean coast, ${china} on the China coast.`);
   }
 
   const nowIso = process.env.NOW || now.toISOString();
