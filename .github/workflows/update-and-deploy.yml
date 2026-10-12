@@ -20,7 +20,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: ais-update
+  # App changes (push) deploy right away instead of waiting behind a 20-minute data update.
+  group: ais-${{ github.event_name == 'push' && 'deploy' || 'update' }}
   cancel-in-progress: false
 
 jobs:
