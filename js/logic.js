@@ -101,8 +101,9 @@
         const nearChile = pos && inChile(pos.Latitude, pos.Longitude) && cargo && length >= 100;
         const watched = watchSet.has(compact(name)) || watchSet.has(String(mmsi)) ||
           (st && st.ImoNumber && watchSet.has(String(st.ImoNumber)));
-        // Large cargo/container ships anywhere are kept too, so they can be found in search before they head for China.
-        const bigCargo = cargo && length >= 150;
+        // Any ship of 150 m or more is kept too, whatever its destination says, so it can be found in search
+        // and followed even when the crew types an odd or empty destination.
+        const bigCargo = length >= 150;
         if (!(dest.port || (dest.chile && cargo) || nearChile || watched || bigCargo)) continue;
         if (!name) continue;
         v = vessels[mmsi] = { mmsi: Number(mmsi), name, etaHistory: [], firstSeen: nowIso };
@@ -142,7 +143,7 @@
       updateVoyage(v, nowIso);
     }
 
-    // Prune vessels not seen for 120 days (unless watched).
+    // Prune vessels not seen for 120 days (unless watched). Saved vessels keep their own copy in the app.
     for (const [mmsi, v] of Object.entries(vessels)) {
       const watched = watchSet.has(compact(v.name)) || watchSet.has(String(mmsi)) || (v.imo && watchSet.has(String(v.imo)));
       if (!watched && v.lastSeen && Date.parse(nowIso) - Date.parse(v.lastSeen) > 120 * DAY) delete vessels[mmsi];

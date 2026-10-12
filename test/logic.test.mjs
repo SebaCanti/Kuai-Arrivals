@@ -42,8 +42,8 @@ const msg = (type, mmsi, time, body, name = 'MAERSK TEST') => JSON.stringify({
   MessageType: type, MetaData: { MMSI: mmsi, ShipName: name, time_utc: `${time.replace('T', ' ').replace('Z', '')}.000 +0000 UTC` },
   Message: { [type]: body }
 });
-const stat = (mmsi, time, dest, eta, name = 'MAERSK TEST', type = 71) => msg('ShipStaticData', mmsi, time,
-  { Name: name, ImoNumber: 9000001, CallSign: 'ABC', Destination: dest, Eta: eta, Type: type, Dimension: { A: 200, B: 100, C: 20, D: 20 } }, name);
+const stat = (mmsi, time, dest, eta, name = 'MAERSK TEST', type = 71, len = 300) => msg('ShipStaticData', mmsi, time,
+  { Name: name, ImoNumber: 9000001, CallSign: 'ABC', Destination: dest, Eta: eta, Type: type, Dimension: { A: len - 100, B: 100, C: 20, D: 20 } }, name);
 const pos = (mmsi, time, lat, lon, sog, nav = 0) => msg('PositionReport', mmsi, time,
   { Latitude: lat, Longitude: lon, Sog: sog, Cog: 270, NavigationalStatus: nav });
 
@@ -60,10 +60,10 @@ test('daily job tracks a voyage end to end', () => {
   const eta1 = { Month: 11, Day: 20, Hour: 10, Minute: 0 };
   const eta2 = { Month: 11, Day: 24, Hour: 10, Minute: 0 };
 
-  // Day 1: loading in San Antonio. A ferry near Europe is ignored.
+  // Day 1: loading in San Antonio. A small ferry near Europe is ignored.
   let db = run('2026-10-10T09:10:00Z', [
     stat(111, '2026-10-10T09:01:00Z', 'CNSHA', eta1), pos(111, '2026-10-10T09:02:00Z', -33.59, -71.62, 0, 5),
-    stat(222, '2026-10-10T09:01:00Z', 'DOVER', eta1, 'FERRY', 60), pos(222, '2026-10-10T09:02:00Z', 51, 1.3, 15)
+    stat(222, '2026-10-10T09:01:00Z', 'DOVER', eta1, 'FERRY', 60, 120), pos(222, '2026-10-10T09:02:00Z', 51, 1.3, 15)
   ]);
   assert.deepEqual(Object.keys(db.vessels), ['111']);
   let v = db.vessels['111'];
@@ -198,4 +198,12 @@ test('CSV import: template columns, ETA from "Fecha destino", several containers
   assert.equal(rows[0].port, 'SHANGHAI');
   assert.deepEqual(rows[0].bls, ['YMLU1234567', 'YMLU7654321']);
   assert.deepEqual(rows[1].bls, ['TGHU1111111']);
+});
+
+test('a big ship with an odd or empty destination is still kept', () => {
+  const db = { vessels: {} };
+  const statics = new Map([['333', { Name: 'ODD DEST', Type: 0, Destination: '', Dimension: { A: 150, B: 50 } }],
+    ['444', { Name: 'SMALL TUG', Type: 52, Destination: '', Dimension: { A: 20, B: 10 } }]]);
+  L.mergeSnapshot(db, statics, new Map(), '2026-10-12T09:00:00Z', []);
+  assert.deepEqual(Object.keys(db.vessels), ['333']);
 });

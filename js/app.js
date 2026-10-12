@@ -17,6 +17,7 @@
 
   function load(k, fallback) { try { return JSON.parse(localStorage.getItem(k)) || fallback; } catch { return fallback; } }
   function persist() {
+    for (const s of saved) if (s.mmsi && data.vessels[s.mmsi]) s.lastAis = data.vessels[s.mmsi];
     localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     mirrorToServiceWorker();
@@ -45,7 +46,8 @@
     checkAlerts();
   }
 
-  function vesselOf(s) { return s.mmsi ? data.vessels[s.mmsi] || null : null; }
+  // A saved vessel keeps its last known AIS record, so it never loses its data if the daily file drops it.
+  function vesselOf(s) { return s.mmsi ? data.vessels[s.mmsi] || s.lastAis || null : null; }
 
   // Link manually added vessels once they appear in AIS data, and freeze the original ETA.
   function reconcile() {
@@ -509,16 +511,6 @@
     if (errors.length) console.warn(errors.join('\n'));
   }
 
-  // The daily job asks VesselFinder only for the vessels listed in data/watchlist.json in the repo.
-  async function copyWatchlist() {
-    const list = saved.filter(s => !arrivedOf(s)).map(s => String(s.imo || s.mmsi || s.name));
-    const text = JSON.stringify(list, null, 2);
-    try { await navigator.clipboard.writeText(text); toast('Copied. Paste it into data/watchlist.json on GitHub'); }
-    catch { prompt('Copy this into data/watchlist.json', text); }
-    const m = location.hostname.match(/^([^.]+)\.github\.io$/);
-    const repo = location.pathname.split('/')[1];
-    if (m && repo) window.open(`https://github.com/${m[1]}/${repo}/edit/main/data/watchlist.json`, '_blank', 'noopener');
-  }
   function arrivedOf(s) { return L.computeStatus(s, vesselOf(s), Date.now(), settings.staleDays).arrivedAt; }
 
   // ── UTIL ──
@@ -568,7 +560,6 @@
       if (e.key === 'Enter') { const li = $('cntrResults').querySelector('[data-goto]'); if (li) cntrGoto(li.dataset.goto, li.dataset.ref); }
     });
     $('cntrResults').addEventListener('click', e => { const li = e.target.closest('[data-goto]'); if (li) cntrGoto(li.dataset.goto, li.dataset.ref); });
-    $('watchBtn').addEventListener('click', copyWatchlist);
     $('importFile').addEventListener('change', e => { if (e.target.files[0]) importList(e.target.files[0]); e.target.value = ''; });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fetchData(); });
 
