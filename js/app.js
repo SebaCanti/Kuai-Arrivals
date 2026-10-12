@@ -158,14 +158,14 @@
     try {
       const q = new URLSearchParams(location.search).get('design');
       if (q === 'off') { localStorage.removeItem('kuai.design'); return null; }
-      if (/^[abc]$/.test(q || '')) { localStorage.setItem('kuai.design', q); return q; }
+      if (/^[a-f]$/.test(q || '')) { localStorage.setItem('kuai.design', q); return q; }
       return localStorage.getItem('kuai.design') || null;
     } catch { return null; }
   })();
 
   // Split each character into a tile for the split-flap design.
   function flap(text, delayBase = 0) {
-    if (design !== 'a') return esc(text);
+    if (design !== 'a' && design !== 'd') return esc(text);
     return [...String(text)].map((c, i) =>
       `<span class="fl" style="animation-delay:${delayBase + i * 35}ms">${c === ' ' ? '&nbsp;' : esc(c)}</span>`).join('');
   }
@@ -485,6 +485,8 @@
 
     if (design) {
       document.body.dataset.design = design;
+      document.querySelector('.board-title').innerHTML =
+        `<span class="bt-en">${flap('KUAI TRACKING')}</span><span class="bt-zh">${flap('快追踪', 500)}</span>`;
       const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' }); };
       tick(); setInterval(tick, 10000);
     }

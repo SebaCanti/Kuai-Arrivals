@@ -115,3 +115,72 @@ body[data-design="c"] .bar > i { background: linear-gradient(90deg, #1fb57a, #2e
 .b-to, .b-dep, .b-eta, .b-days { white-space: nowrap; overflow: hidden; }
 body[data-design="a"] .b-row { font-size: 16px; }
 body[data-design="a"] .fl { margin-right: 1px; }
+
+/* Title: tiles for the Chinese name too */
+body[data-design] .board-title .bt-zh .fl { font-family: "Noto Sans SC", sans-serif; }
+body[data-design="a"] .board-title .bt-en, body[data-design="d"] .board-title .bt-en { font-size: 28px; letter-spacing: 0; }
+body[data-design="a"] .board-title .bt-zh, body[data-design="d"] .board-title .bt-zh { font-size: 26px; letter-spacing: 0; }
+body[data-design="a"] .board-title .bt-zh { color: #f5c518; }
+
+/* ── D · SOLARI WHITE (classic European split-flap: white on black tiles) ── */
+body[data-design="d"] { --bg: #111; --panel: #1a1a1a; --panel-2: #222; --line: #333; --text: #f2f2f2; --muted: #8c8c8c; --green: #34d27b; }
+body[data-design="d"] { background: #111 linear-gradient(#1a1a1a, #0c0c0c); font-family: Oswald, "Arial Narrow", sans-serif; }
+body[data-design="d"] h1, body[data-design="d"] .sub, body[data-design="d"] .logo { display: none; }
+body[data-design="d"] .board-title .bt-en, body[data-design="d"] .board-title .bt-zh { color: #f2f2f2; font-weight: 700; }
+body[data-design="d"] .clock { font-size: 30px; font-weight: 700; color: #f2f2f2; background: #000; border-radius: 6px; padding: 2px 12px; }
+body[data-design="d"] .b-head { color: #fff; background: #0a3d91; font-weight: 700; letter-spacing: 2px; border-radius: 6px 6px 0 0; }
+body[data-design="d"] .b-row { border-bottom: 3px solid #0c0c0c; font-size: 18px; font-weight: 500; text-transform: uppercase; color: #f2f2f2; background: #161616; }
+body[data-design="d"] .fl { background: linear-gradient(#2b2b2b 49%, #000 50%, #262626 51%); padding: 3px 2px; margin-right: 2px; border-radius: 2px; min-width: .8em; text-align: center; box-shadow: 0 2px 0 #000; }
+body[data-design="d"] .b-vessel small { color: #8c8c8c; text-transform: none; font-family: Inter, sans-serif; font-size: 11px; }
+body[data-design="d"] .bar { background: #000; border-color: #333; }
+body[data-design="d"] .bar > i { background: #f2f2f2; }
+body[data-design="d"] .b-row.arrived .bar > i { background: #34d27b; }
+body[data-design="d"] .b-status { padding: 4px 8px; border-radius: 3px; text-align: center; background: #000; }
+body[data-design="d"] .b-status.arrived { color: #34d27b; }
+body[data-design="d"] .b-status.late, body[data-design="d"] .b-status.stale { color: #fff; background: #c8102e; }
+body[data-design="d"] .b-status.early, body[data-design="d"] .b-status.ontime { color: #34d27b; }
+body[data-design="d"] .b-status.origin { color: #ffcc00; }
+
+/* ── E · GREEN CRT MONITOR (1980s airport TV screen) ── */
+body[data-design="e"] { --bg: #020a04; --panel: #04140a; --panel-2: #061c0e; --line: #0c3a1c; --text: #39ff6a; --muted: #1f9a42; --green: #39ff6a; }
+body[data-design="e"] { background: #020a04; font-family: VT323, ui-monospace, monospace; }
+body[data-design="e"]::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 30;
+  background: repeating-linear-gradient(rgba(0,0,0,.25) 0 1px, transparent 1px 3px); }
+body[data-design="e"] h1, body[data-design="e"] .sub, body[data-design="e"] .logo { display: none; }
+body[data-design="e"] .board-title { color: #39ff6a; text-shadow: 0 0 8px rgba(57,255,106,.8); }
+body[data-design="e"] .board-title .bt-en { font-size: 40px; letter-spacing: 3px; }
+body[data-design="e"] .board-title .bt-zh { font-size: 28px; font-family: "Noto Sans SC", sans-serif; }
+body[data-design="e"] .clock { font-size: 40px; color: #39ff6a; text-shadow: 0 0 8px rgba(57,255,106,.8); }
+body[data-design="e"] .b-head { color: #1f9a42; font-size: 18px; border-bottom: 1px dashed #1f9a42; }
+body[data-design="e"] .b-row { font-size: 24px; text-transform: uppercase; color: #39ff6a; text-shadow: 0 0 6px rgba(57,255,106,.6); border-bottom: 1px dashed #0c3a1c; }
+body[data-design="e"] .b-row:hover { background: rgba(57,255,106,.06); }
+body[data-design="e"] .b-vessel small { color: #1f9a42; font-size: 16px; text-shadow: none; }
+body[data-design="e"] .bar { background: #04140a; border: 1px solid #1f9a42; border-radius: 0; height: 12px; }
+body[data-design="e"] .bar > i { background: repeating-linear-gradient(90deg, #39ff6a 0 8px, #04140a 8px 10px); border-radius: 0; }
+body[data-design="e"] .b-status.late, body[data-design="e"] .b-status.stale { background: #39ff6a; color: #020a04; text-shadow: none; padding: 0 6px; }
+body[data-design="e"] input, body[data-design="e"] select, body[data-design="e"] #search { font-family: VT323, monospace; font-size: 20px; border-radius: 0; }
+
+/* ── F · TELETEXT FLIGHT INFO (1980s TV flight-information pages) ── */
+body[data-design="f"] { --bg: #000; --panel: #000; --panel-2: #0a0a0a; --line: #0000ff; --text: #fff; --muted: #00ffff; --green: #00ff00; }
+body[data-design="f"] { background: #000; font-family: VT323, ui-monospace, monospace; }
+body[data-design="f"] h1, body[data-design="f"] .sub, body[data-design="f"] .logo { display: none; }
+body[data-design="f"] .top { background: #0000ff; }
+body[data-design="f"] .board-title { color: #ffff00; }
+body[data-design="f"] .board-title .bt-en { font-size: 40px; letter-spacing: 2px; }
+body[data-design="f"] .board-title .bt-zh { font-size: 28px; color: #fff; font-family: "Noto Sans SC", sans-serif; }
+body[data-design="f"] .clock { font-size: 40px; color: #fff; }
+body[data-design="f"] .top .icon-btn { background: #000; color: #ffff00; border-color: #ffff00; border-radius: 0; }
+body[data-design="f"] .b-head { color: #000; background: #00ffff; font-size: 20px; }
+body[data-design="f"] .b-row { font-size: 24px; text-transform: uppercase; color: #fff; }
+body[data-design="f"] .b-row:nth-child(even) { background: #000080; }
+body[data-design="f"] .b-vessel b { color: #ffff00; }
+body[data-design="f"] .b-to { color: #00ffff; }
+body[data-design="f"] .b-vessel small { color: #00ffff; font-size: 16px; }
+body[data-design="f"] .bar { background: #000; border: 1px solid #fff; border-radius: 0; }
+body[data-design="f"] .bar > i { background: #ffff00; border-radius: 0; }
+body[data-design="f"] .b-row.arrived .bar > i { background: #00ff00; }
+body[data-design="f"] .b-status.arrived, body[data-design="f"] .b-status.early, body[data-design="f"] .b-status.ontime { color: #00ff00; }
+body[data-design="f"] .b-status.late, body[data-design="f"] .b-status.stale { color: #ff0000; }
+body[data-design="f"] .b-status.origin { color: #ff00ff; }
+body[data-design="f"] input, body[data-design="f"] select, body[data-design="f"] #search { font-family: VT323, monospace; font-size: 20px; border-radius: 0; }
+body[data-design="d"] .b-row { font-size: 16px; } body[data-design="d"] .fl { padding: 3px 1px; margin-right: 1px; }
