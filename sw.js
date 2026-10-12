@@ -1,5 +1,5 @@
 // Kuai Tracking — Service Worker
-const CACHE_NAME = 'kuai-v7';
+const CACHE_NAME = 'kuai-v8';
 const DATA_URL = 'data/vessels.json';
 
 const STATIC_ASSETS = [
@@ -11,7 +11,8 @@ const STATIC_ASSETS = [
   './js/app.js',
   './manifest.json',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png'
 ];
 
 importScripts('js/logic.js');
