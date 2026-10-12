@@ -156,11 +156,13 @@
   // ── ARRIVALS BOARD (airport-style designs a / b / c) ──
   const design = (() => {
     try {
+      // Default: E (green CRT monitor). ?design=a..f previews another board, ?design=classic shows the old cards.
       const q = new URLSearchParams(location.search).get('design');
-      if (q === 'off') { localStorage.removeItem('kuai.design'); return null; }
-      if (/^[a-f]$/.test(q || '')) { localStorage.setItem('kuai.design', q); return q; }
-      return localStorage.getItem('kuai.design') || null;
-    } catch { return null; }
+      if (q === 'classic') { localStorage.setItem('kuai.design.v2', 'classic'); return null; }
+      if (/^[a-f]$/.test(q || '')) { localStorage.setItem('kuai.design.v2', q); return q; }
+      const saved = localStorage.getItem('kuai.design.v2');
+      return saved === 'classic' ? null : saved || 'e';
+    } catch { return 'e'; }
   })();
 
   // Split each character into a tile for the split-flap design.
@@ -185,7 +187,7 @@
 
   function boardHeadHtml() {
     return `<div class="b-head" role="row">
-      <span>Vessel</span><span>To</span><span>Departed</span><span>Voyage</span><span>ETA</span><span>Days</span><span>Status</span></div>`;
+      <span>Vessel</span><span>To</span><span>Departed</span><span>Voyage</span><span title="Latest (updated) ETA">Upd ETA</span><span>Days</span><span>Status</span></div>`;
   }
 
   function boardRowHtml({ s, v, st }, idx) {
@@ -204,7 +206,7 @@
         ${vfLink(s, v)}</div>`;
     }
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
-      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}</small></span>
+      <span class="b-vessel"><b>${st.state === 'arrived' ? '<i class="b-check" aria-hidden="true">✔</i>' : ''}${flap(s.name, d0)}</b><small>${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}</small></span>
       <span class="b-to">${flap((st.portName || '—').toUpperCase(), d0 + 200)}</span>
       <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
       <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
