@@ -8,7 +8,7 @@
 //                      data/watchlist.json; whichever source has the newest data wins.
 //   VF_FIXTURE=path    use a saved VesselFinder JSON response instead of calling the API (tests)
 //   LISTEN_MINUTES     how long to listen (default 20)
-//   FORCE=1            skip the "6 AM Chile time, once a day" guard (manual runs)
+//   FORCE=1            skip the "at most every 2 hours" guard (manual runs)
 //   AIS_FIXTURE=path   replay a JSON-lines file of AISStream messages instead of connecting (tests)
 //   DATA_DIR           where vessels.json / watchlist.json live (default ./data)
 import { readFile, writeFile } from 'node:fs/promises';
@@ -22,13 +22,6 @@ const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(new URL(import.m
 const DB_PATH = path.join(DATA_DIR, 'vessels.json');
 const WATCH_PATH = path.join(DATA_DIR, 'watchlist.json');
 const LISTEN_MS = Number(process.env.LISTEN_MINUTES || 20) * 60000;
-
-function santiago(date) {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit',
-    day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(date);
-  const get = t => parts.find(p => p.type === t).value;
-  return { day: `${get('year')}-${get('month')}-${get('day')}`, hour: Number(get('hour')) };
-}
 
 async function readJson(p, fallback) {
   try { return JSON.parse(await readFile(p, 'utf8')); } catch { return fallback; }
@@ -165,10 +158,10 @@ async function main() {
   const db = await readJson(DB_PATH, { updatedAt: null, vessels: {} });
 
   if (!process.env.FORCE && !process.env.AIS_FIXTURE) {
-    const local = santiago(now);
-    const last = db.updatedAt ? santiago(new Date(db.updatedAt)).day : null;
-    if (local.hour < 6 || last === local.day) {
-      console.log(`Skipping: Santiago ${local.day} ${local.hour}h, last update ${last}.`);
+    // Runs every 3 hours; skip if another run already updated the data in the last 2 hours.
+    const ageMin = db.updatedAt ? (now - new Date(db.updatedAt)) / 60000 : Infinity;
+    if (ageMin < 120) {
+      console.log(`Skipping: last update ${Math.round(ageMin)} min ago.`);
       return;
     }
   }

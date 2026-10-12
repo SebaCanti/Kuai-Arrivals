@@ -1,10 +1,10 @@
 name: AIS update & deploy
 
 on:
-  # 6:00 AM Chile time. Chile switches between UTC-3 (summer) and UTC-4 (winter), so this runs
-  # at 09, 10 and 11 UTC and the script only does the work once, on the first run at or after 6 AM.
+  # Every 3 hours (09 UTC is 6 AM Chile in summer). The free AIS feed only hears ships near a coast,
+  # so listening several times a day catches more vessels as they pass in range.
   schedule:
-    - cron: '0 9,10,11 * * *'
+    - cron: '0 */3 * * *'
   workflow_dispatch:
     inputs:
       force:

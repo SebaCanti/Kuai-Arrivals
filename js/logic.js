@@ -17,7 +17,11 @@
     NANSHA:   { name: 'Nansha',    lat: 22.68, lon: 113.66, radiusKm: 25,
       codes: ['CNNSA', 'NANSHA', 'CNCAN', 'GUANGZHOU'] },
     SHENZHEN: { name: 'Shenzhen',  lat: 22.52, lon: 114.08, radiusKm: 28,
-      codes: ['CNSZX', 'SHENZHEN', 'YANTIAN', 'CNYTN', 'SHEKOU', 'CNSHK', 'CHIWAN', 'CNCWN', 'DACHAN', 'CNDCB'] }
+      codes: ['CNSZX', 'SHENZHEN', 'YANTIAN', 'CNYTN', 'SHEKOU', 'CNSHK', 'CHIWAN', 'CNCWN', 'DACHAN', 'CNDCB'] },
+    // Other big Chinese ports that Chile services call at or tranship through.
+    NINGBO:   { name: 'Ningbo',    lat: 29.93, lon: 121.85, radiusKm: 35, codes: ['CNNGB', 'NINGBO', 'BEILUN', 'ZHOUSHAN'] },
+    QINGDAO:  { name: 'Qingdao',   lat: 36.00, lon: 120.25, radiusKm: 35, codes: ['CNTAO', 'QINGDAO', 'CNQIN', 'CNQDG'] },
+    XIAMEN:   { name: 'Xiamen',    lat: 24.45, lon: 118.07, radiusKm: 25, codes: ['CNXMN', 'XIAMEN'] }
   };
 
   // Chilean loading ports (used to recognise vessels on the lane before they sail).
