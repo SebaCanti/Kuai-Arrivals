@@ -215,7 +215,7 @@
         ${vfLink(s, v)}</div>`;
     }
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
-      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
+      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : 'Carrier —')} · orig. ETA ${st.originalEta ? L.fmtDate(st.originalEta) : '—'}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
       <span class="b-to">${flap((st.portName || st.aisDest || '—').toUpperCase(), d0 + 200)}</span>
       <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
       <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
