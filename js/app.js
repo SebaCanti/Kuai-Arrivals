@@ -196,7 +196,7 @@
 
   function boardHeadHtml() {
     return `<div class="b-head" role="row">
-      <span>Vessel</span><span>To</span><span>Departed</span><span>Voyage</span><span title="Latest (updated) ETA">Upd ETA</span><span title="Days to destination">DTD</span><span>Status</span></div>`;
+      <span>Vessel</span><span>Origin</span><span>Departed</span><span>To</span><span>Voyage</span><span title="Latest (updated) ETA">Upd ETA</span><span title="Days to destination">DTD</span><span>Status</span></div>`;
   }
 
   function boardRowHtml({ s, v, st }, idx) {
@@ -216,8 +216,9 @@
     }
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
       <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : 'Carrier —')} · orig. ETA ${st.originalEta ? L.fmtDate(st.originalEta) : '—'}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
-      <span class="b-to">${flap((st.portName || st.aisDest || '—').toUpperCase(), d0 + 200)}</span>
-      <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
+      <span class="b-from">${flap((st.origin || '—').toUpperCase(), d0 + 150)}</span>
+      <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 250)}</span>
+      <span class="b-to">${flap((st.portName || st.aisDest || '—').toUpperCase(), d0 + 300)}</span>
       <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
       <span class="b-eta">${flap(eta.toUpperCase(), d0 + 400)}</span>
       <span class="b-days">${flap(days, d0 + 450)}</span>
@@ -293,7 +294,7 @@
     const badge = { arrived: 'ARRIVED', transit: 'IN TRANSIT', origin: 'AT ORIGIN', nodata: 'NO AIS DATA' }[st.state];
     const pct = Math.round((st.progress || 0) * 100);
     const left = st.departed
-      ? `Departed: ${L.fmtDate(st.departed)}${st.departedEstimated ? ' <span class="muted">(est.)</span>' : ''}`
+      ? `Departed${st.origin ? ` ${esc(st.origin)}` : ''}: ${L.fmtDate(st.departed)}${st.departedEstimated ? ' <span class="muted">(est.)</span>' : ''}`
       : '<span class="muted">Departure: pending</span>';
     const right = st.arrivedAt ? `Arrived: ${L.fmtDate(st.arrivedAt)}` : `ETA: ${L.fmtDate(st.eta)}`;
     let delay = '';
@@ -365,6 +366,7 @@
         <label>Carrier<select data-field="carrier">${vesselCarrierOpts}</select></label>
       </div>
       <div class="grid2">
+        <label>Origin port<input type="text" data-field="originPort" value="${esc(s.originPort || '')}" placeholder="${esc(st.origin || 'e.g. San Antonio')}"></label>
         <label>Departure (ATD)<input type="date" data-field="departedManual" value="${dateVal(s.departedManual || st.departed)}"></label>
         <label>ETA override<input type="date" data-field="etaManual" value="${dateVal(s.etaManual)}"></label>
         <label>Original ETA<input type="date" data-field="originalEta" value="${dateVal(s.originalEta)}"></label>
@@ -426,6 +428,7 @@
     const f = el.dataset.field;
     if (f === 'port') { s.port = el.value || null; s.originalEta = null; freezeOriginal(s); }
     else if (f === 'carrier') s.carrier = el.value || null;
+    else if (f === 'originPort') s.originPort = el.value.trim() || null;
     else s[f] = el.value ? `${el.value}T12:00:00.000Z` : null;
     if (f === 'etaManual') s.etaManualAt = new Date().toISOString();
     if (f === 'originalEta' && !el.value) freezeOriginal(s);
@@ -514,6 +517,7 @@
       }
       if (r.departed) s.departedManual = r.departed;
       if (r.port) s.port = r.port;
+      if (r.origin) s.originPort = r.origin;
       if (r.eta) { s.etaManual = r.eta; s.etaManualAt = new Date().toISOString(); }
       if (!s.imo && r.imo) s.imo = r.imo;
       for (const ref of r.bls) if (!(s.bls || []).some(b => b.ref === ref)) (s.bls = s.bls || []).push({ ref, carrier: null });
