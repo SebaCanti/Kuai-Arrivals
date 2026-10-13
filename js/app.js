@@ -204,7 +204,7 @@
     const status = boardStatus(st);
     const ck = carrierKey(s);
     const days = st.state === 'arrived' ? '—' : st.daysLeft == null ? '—' : st.daysLeft < 0 ? `+${-st.daysLeft}` : String(st.daysLeft);
-    const eta = st.arrivedAt ? L.fmtDate(st.arrivedAt) : L.fmtDate(st.eta);
+    const eta = st.arrivedAt ? L.fmtDate(st.arrivedAt) : L.fmtDate(st.eta) + (st.aisDest && st.eta ? '*' : '');
     const d0 = idx * 120;
     let warn = '';
     if (st.stale) {
@@ -215,8 +215,8 @@
         ${vfLink(s, v)}</div>`;
     }
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
-      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
-      <span class="b-to">${flap((st.portName || '—').toUpperCase(), d0 + 200)}</span>
+      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}${st.aisDest ? ` · <em class="b-arr-note">*AIS says bound for ${esc(st.aisDest)}, not a China port</em>` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
+      <span class="b-to">${flap((st.portName || st.aisDest || '—').toUpperCase(), d0 + 200)}</span>
       <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
       <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
       <span class="b-eta">${flap(eta.toUpperCase(), d0 + 400)}</span>
@@ -253,7 +253,7 @@
     ul.innerHTML = hits.slice(0, 30).map(({ s, ref }) => {
       const st = L.computeStatus(s, vesselOf(s), Date.now(), settings.staleDays);
       const status = st.state === 'arrived' ? `ARRIVED ${L.fmtDate(st.arrivedAt)}` : st.eta ? `ETA ${L.fmtDate(st.eta)}${st.daysLeft != null && st.daysLeft >= 0 ? ` · ${st.daysLeft}D` : ''}` : 'NO ETA';
-      return `<li data-goto="${esc(s.id)}" data-ref="${esc(ref)}"><b>${esc(ref)}</b><span>${esc(s.name)} → ${esc((st.portName || '—').toUpperCase())}</span><span>${esc(status)}</span></li>`;
+      return `<li data-goto="${esc(s.id)}" data-ref="${esc(ref)}"><b>${esc(ref)}</b><span>${esc(s.name)} → ${esc((st.portName || st.aisDest || '—').toUpperCase())}</span><span>${esc(status)}</span></li>`;
     }).join('');
   }
 
@@ -319,7 +319,7 @@
       : 'No AIS position';
     return `<article class="card ${st.state === 'arrived' ? 'arrived' : ''}" data-id="${esc(s.id)}">
       <div class="card-head">
-        <div><div class="v-name">${esc(s.name)}</div><div class="v-port">→ ${esc(st.portName || 'Destination unknown')}</div></div>
+        <div><div class="v-name">${esc(s.name)}</div><div class="v-port">→ ${esc(st.portName || (st.aisDest ? st.aisDest + ' (AIS, not China)' : 'Destination unknown'))}</div></div>
         <span class="badge ${st.state}">${badge}</span>
       </div>
       <div class="days">${headline(st)}</div>

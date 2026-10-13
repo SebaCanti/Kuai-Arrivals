@@ -281,3 +281,11 @@ test('a vessel first heard at sea, with no known departure, shows as in transit 
   assert.equal(st.state, 'transit');
   assert.equal(st.progress, null);
 });
+
+test('vessel bound outside China still shows its AIS destination and ETA', () => {
+  const v = { name: 'AURIGA OCEAN', dest: 'AU WEI', destPort: null, eta: '2026-10-16T00:00:00.000Z', lat: -2.3, lon: 129.7, sog: 12, lastSeen: '2026-10-12T09:14:19Z' };
+  const st = L.computeStatus({ id: '1', name: 'AURIGA OCEAN' }, v, Date.parse('2026-10-13T00:00:00Z'), 3);
+  assert.equal(st.port, null);
+  assert.equal(st.aisDest, 'AU WEI');
+  assert.equal(st.eta, '2026-10-16T00:00:00.000Z');
+});
