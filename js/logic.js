@@ -293,7 +293,9 @@
 
     return { port, portName: port && PORTS[port] ? PORTS[port].name : null, eta, originalEta, departed,
       departedEstimated, arrivedAt, progress, progressMode, daysLeft, delayDays, lastSeen, daysSinceUpdate,
-      stale, state, etaSource: crNewer && cr.eta ? cr.source : null };
+      stale, state, etaSource: crNewer && cr.eta ? cr.source : null,
+      // No China port known: still show what the vessel's own AIS says (e.g. "AU WEI"), so the row is never blank.
+      aisDest: !port && v && v.dest ? v.dest : null };
   }
 
   // Where the voyage started, for distance-based progress: the inferred departure point, or Chile when
