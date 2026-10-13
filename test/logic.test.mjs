@@ -309,3 +309,10 @@ test('origin port: typed, from CSV, or named from the stop the vessel left', () 
   assert.equal(rows[0].port, 'SHANGHAI');
   assert.equal(rows[0].departed, '2026-10-05T12:00:00.000Z');
 });
+
+test('typed destination outside the China list wins and is shown as written', () => {
+  const v = { name: 'X', dest: 'CNSHA', destPort: 'SHANGHAI', eta: '2026-11-10T00:00:00Z', lastSeen: '2026-10-12T00:00:00Z' };
+  const st = L.computeStatus({ id: '1', name: 'X', destText: 'Busan' }, v, Date.parse('2026-10-13T00:00:00Z'), 3);
+  assert.equal(st.port, null);
+  assert.equal(st.aisDest, 'Busan');
+});

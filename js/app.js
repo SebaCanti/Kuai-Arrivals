@@ -335,8 +335,8 @@
   function dateVal(iso) { return iso ? iso.slice(0, 10) : ''; }
 
   function detailsHtml(s, v, st) {
-    const portOpts = `<option value="">Auto${v && v.destPort ? ` (AIS: ${L.PORTS[v.destPort].name})` : ''}</option>` +
-      Object.keys(L.PORTS).map(k => `<option value="${k}" ${s.port === k ? 'selected' : ''}>${L.PORTS[k].name}</option>`).join('');
+    const portList = `<datalist id="portList">${Object.keys(L.PORTS).map(k => `<option value="${esc(L.PORTS[k].name)}">`).join('')}</datalist>`;
+    const destVal = s.port && L.PORTS[s.port] ? L.PORTS[s.port].name : s.destText || '';
     const carrierOpts = '<option value="">Auto</option>' +
       Object.keys(L.CARRIERS).map(k => `<option value="${k}">${L.CARRIERS[k].name}</option>`).join('');
     const autoCarrier = L.carrierFromName(s.name);
@@ -363,7 +363,7 @@
     return `<div class="details">
       <div class="grid2">
         <label>Origin port<input type="text" data-field="originPort" value="${esc(s.originPort || '')}" placeholder="${esc(st.origin || 'e.g. San Antonio')}"></label>
-        <label>Destination port<select data-field="port">${portOpts}</select></label>
+        <label>Destination port<input type="text" data-field="port" list="portList" value="${esc(destVal)}" placeholder="${esc(st.portName || st.aisDest || 'e.g. Shanghai')}">${portList}</label>
         <label>Carrier<select data-field="carrier">${vesselCarrierOpts}</select></label>
       </div>
       <div class="grid2">
@@ -426,7 +426,12 @@
     if (!el) return;
     const s = saved.find(x => x.id === el.closest('[data-id]').dataset.id);
     const f = el.dataset.field;
-    if (f === 'port') { s.port = el.value || null; s.originalEta = null; freezeOriginal(s); }
+    if (f === 'port') {
+      // Typed destination: a known China port is tracked as such; anything else is kept as written.
+      const t = el.value.trim();
+      s.port = t ? L.portFromText(t) : null; s.destText = t && !s.port ? t : null;
+      s.originalEta = null; freezeOriginal(s);
+    }
     else if (f === 'carrier') s.carrier = el.value || null;
     else if (f === 'originPort') s.originPort = el.value.trim() || null;
     else s[f] = el.value ? `${el.value}T12:00:00.000Z` : null;
