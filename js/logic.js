@@ -30,6 +30,22 @@
   // Rough box around the Chilean coast and its port approaches.
   const CHILE_BOX = { latMin: -46, latMax: -17.5, lonMin: -75.5, lonMax: -69.5 };
   const CHILE_REF = { lat: -33.59, lon: -71.62 }; // San Antonio, for distance-based progress
+  // Loading ports, to name where a vessel departed from (its last stop before getting under way).
+  const ORIGIN_PORTS = [
+    { name: 'San Antonio', lat: -33.59, lon: -71.62, radiusKm: 20 }, { name: 'Valparaíso', lat: -33.03, lon: -71.63, radiusKm: 20 },
+    { name: 'San Vicente', lat: -36.73, lon: -73.13, radiusKm: 12 }, { name: 'Lirquén', lat: -36.71, lon: -72.98, radiusKm: 10 },
+    { name: 'Coronel', lat: -37.03, lon: -73.15, radiusKm: 12 }, { name: 'Iquique', lat: -20.20, lon: -70.15, radiusKm: 15 },
+    { name: 'Antofagasta', lat: -23.64, lon: -70.40, radiusKm: 15 }, { name: 'Arica', lat: -18.47, lon: -70.32, radiusKm: 15 },
+    { name: 'Callao', lat: -12.05, lon: -77.15, radiusKm: 20 }, { name: 'Busan', lat: 35.08, lon: 129.05, radiusKm: 25 },
+    { name: 'Manzanillo (MX)', lat: 19.06, lon: -104.30, radiusKm: 15 }
+  ];
+  function originName(lat, lon) {
+    if (lat == null || lon == null) return null;
+    const all = ORIGIN_PORTS.concat(Object.values(PORTS));
+    let best = null, bestKm = Infinity;
+    for (const p of all) { const km = distanceKm(lat, lon, p.lat, p.lon); if (km <= p.radiusKm && km < bestKm) { best = p.name; bestKm = km; } }
+    return best;
+  }
 
   function compact(s) {
     return String(s || '').toUpperCase().replace(/[^A-Z0-9>]/g, '');
@@ -262,6 +278,10 @@
     const lastStopDep = v && v.lastStopAt && v.posAt > v.lastStopAt && v.sog >= 3 && v.navStatus !== 1 && v.navStatus !== 5
       ? v.lastStopAt : null;
     const departed = saved.departedManual || (cr && cr.departedAt) || (voy && voy.departedAt) || lastStopDep || null;
+    // Origin port: typed by the user, else named from where the departure was detected.
+    const origin = saved.originPort ||
+      (voy && voy.departedAt && voy.originLat != null ? originName(voy.originLat, voy.originLon) || (voy.originLat === CHILE_REF.lat ? 'Chile' : null) : null) ||
+      (lastStopDep && !(voy && voy.departedAt) ? originName(v.lastStopLat, v.lastStopLon) : null) || null;
     const departedEstimated = !saved.departedManual && !(cr && cr.departedAt) && (voy && voy.departedAt ? !!voy.departedEstimated : !!lastStopDep);
     const arrivedAt = saved.arrivedManual || (cr && cr.arrivedAt) || (voy && voy.arrivedAt) || null;
     const originalEta = saved.originalEta || (voy && voy.firstEta) || eta;
@@ -296,7 +316,7 @@
 
     return { port, portName: port && PORTS[port] ? PORTS[port].name : null, eta, originalEta, departed,
       departedEstimated, arrivedAt, progress, progressMode, daysLeft, delayDays, lastSeen, daysSinceUpdate,
-      stale, state, etaSource: crNewer && cr.eta ? cr.source : null,
+      stale, state, etaSource: crNewer && cr.eta ? cr.source : null, origin,
       // No known port: show what the vessel's own AIS says (e.g. "AU WEI"), whatever the country.
       aisDest: !port && v && v.dest ? v.dest : null };
   }
@@ -356,6 +376,7 @@
     departed: /(depart|zarpe|atd|etd|sail|salida)/,
     imo: /^imo/,
     bl: /(^bl|b\/l|bill|container|contenedor|cntr|booking)/,
+    origin: /(origen|origin|^pol|embarque|loading|carga)/,
     port: /(puerto|^pod|port|^destin)/
   };
 
@@ -423,6 +444,7 @@
         // One cell can hold several containers: "MSKU1234567 / MSKU7654321"
         bls: idx.bl != null ? (c[idx.bl] || '').toUpperCase().split(/[\s,\/|+&]+/).filter(x => x.length >= 4) : [],
         port: idx.port != null ? portFromText(c[idx.port]) : null,
+        origin: idx.origin != null ? (c[idx.origin] || '').trim() || null : null,
         eta: idx.eta != null ? parseDate(c[idx.eta]) : null
       });
     });

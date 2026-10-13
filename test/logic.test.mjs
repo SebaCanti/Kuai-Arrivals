@@ -178,7 +178,7 @@ test('CSV import: Spanish headers, semicolons, Chilean dates', () => {
   const csv = '﻿Nave;Fecha Zarpe;IMO;Contenedor;Destino\nYM Fountain;05/10/2026;9278090;YMLU1234567;Nansha\n"MSC CHERRY, QUEEN";2026-09-10;;;CNSHA\nBAD SHIP;31/02/2026;;;\n';
   const { rows, errors } = L.parseVesselCsv(csv);
   assert.equal(rows.length, 3);
-  assert.deepEqual(rows[0], { name: 'YM FOUNTAIN', departed: '2026-10-05T12:00:00.000Z', imo: 9278090, bls: ['YMLU1234567'], port: 'NANSHA', eta: null });
+  assert.deepEqual(rows[0], { name: 'YM FOUNTAIN', departed: '2026-10-05T12:00:00.000Z', imo: 9278090, bls: ['YMLU1234567'], port: 'NANSHA', origin: null, eta: null });
   assert.equal(rows[1].name, 'MSC CHERRY, QUEEN');
   assert.equal(rows[1].port, 'SHANGHAI');
   assert.equal(rows[2].departed, null);
@@ -297,4 +297,15 @@ test('departure from the last stop shows for any vessel, whatever its destinatio
   assert.equal(st.departed, '2026-10-11T08:00:00Z');
   assert.equal(st.departedEstimated, true);
   assert.equal(st.aisDest, 'FI KOK');
+});
+
+test('origin port: typed, from CSV, or named from the stop the vessel left', () => {
+  const v = { name: 'X', dest: 'CNSHA', destPort: 'SHANGHAI', eta: '2026-11-10T00:00:00Z', lat: -30, lon: -75, sog: 15, navStatus: 0,
+    posAt: '2026-10-12T00:00:00Z', lastSeen: '2026-10-12T00:00:00Z', lastStopAt: '2026-10-10T00:00:00Z', lastStopLat: -33.58, lastStopLon: -71.63 };
+  assert.equal(L.computeStatus({ id: '1', name: 'X' }, v, Date.parse('2026-10-13T00:00:00Z'), 3).origin, 'San Antonio');
+  assert.equal(L.computeStatus({ id: '1', name: 'X', originPort: 'Coronel' }, v, Date.parse('2026-10-13T00:00:00Z'), 3).origin, 'Coronel');
+  const { rows } = L.parseVesselCsv('Nave;Puerto origen;Fecha Zarpe;Fecha destino;Contenedor;Puerto destino\nMSC CANDIDA;San Antonio;05/10/2026;14/11/2026;MSCU1234567;Shanghai');
+  assert.equal(rows[0].origin, 'San Antonio');
+  assert.equal(rows[0].port, 'SHANGHAI');
+  assert.equal(rows[0].departed, '2026-10-05T12:00:00.000Z');
 });

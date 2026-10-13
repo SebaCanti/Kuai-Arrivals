@@ -8,7 +8,7 @@ body[data-design] .list { display: block; }
 
 .b-head, .b-row {
   display: grid;
-  grid-template-columns: minmax(180px, 2.2fr) 1.1fr 0.9fr 2fr 0.9fr 0.6fr 1.3fr;
+  grid-template-columns: minmax(170px, 2.1fr) 1.1fr 0.9fr 1.1fr 1.7fr 0.9fr 0.6fr 1.3fr;
   gap: 14px; align-items: center; padding: 5px 16px;
 }
 .b-head { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; }
@@ -107,12 +107,12 @@ body[data-design="c"] .bar > i { background: linear-gradient(90deg, #1fb57a, #2e
   .b-row { grid-template-columns: 1fr auto; grid-template-areas: "v s" "t e" "bar bar"; gap: 2px 12px; font-size: 15px !important; }
   .b-vessel { grid-area: v; } .b-status { grid-area: s; max-width: 46vw; }
   .b-to { grid-area: t; } .b-eta { grid-area: e; text-align: right; }
-  .b-dep, .b-days { display: none; }
+  .b-from, .b-dep, .b-days { display: none; }
   .b-bar { grid-area: bar; }
   body[data-design] .board-title .bt-en { font-size: 24px; }
   body[data-design] .clock { font-size: 20px; }
 }
-.b-to, .b-dep, .b-eta, .b-days { white-space: nowrap; overflow: hidden; }
+.b-from, .b-to, .b-dep, .b-eta, .b-days { white-space: nowrap; overflow: hidden; }
 body[data-design="a"] .b-row { font-size: 16px; }
 body[data-design="a"] .fl { margin-right: 1px; }
 
