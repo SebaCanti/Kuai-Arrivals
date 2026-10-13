@@ -362,11 +362,11 @@
       : 'This vessel is not in the AIS data yet. It is linked automatically when it appears; meanwhile set the dates by hand.';
     return `<div class="details">
       <div class="grid2">
+        <label>Origin port<input type="text" data-field="originPort" value="${esc(s.originPort || '')}" placeholder="${esc(st.origin || 'e.g. San Antonio')}"></label>
         <label>Destination port<select data-field="port">${portOpts}</select></label>
         <label>Carrier<select data-field="carrier">${vesselCarrierOpts}</select></label>
       </div>
       <div class="grid2">
-        <label>Origin port<input type="text" data-field="originPort" value="${esc(s.originPort || '')}" placeholder="${esc(st.origin || 'e.g. San Antonio')}"></label>
         <label>Departure (ATD)<input type="date" data-field="departedManual" value="${dateVal(s.departedManual || st.departed)}"></label>
         <label>ETA override<input type="date" data-field="etaManual" value="${dateVal(s.etaManual)}"></label>
         <label>Original ETA<input type="date" data-field="originalEta" value="${dateVal(s.originalEta)}"></label>
