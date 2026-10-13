@@ -272,7 +272,7 @@
     // entered before the carrier last reported.
     const cr = saved.carrierInfo || null;
     const crNewer = cr && cr.at && (!saved.etaManual || !saved.etaManualAt || cr.at > saved.etaManualAt);
-    const port = saved.port || (cr && cr.port) || (voy && voy.port) || (v && v.destPort) || null;
+    const port = saved.destText ? null : saved.port || (cr && cr.port) || (voy && voy.port) || (v && v.destPort) || null;
     const eta = (crNewer && cr.eta) || saved.etaManual || (cr && cr.eta) || (v && v.destPort === port ? v.eta : null) || (voy && voy.firstEta) || null;
     // Departure from the last port seen in AIS, wherever it is: the last stop, once the vessel is under way again.
     const lastStopDep = v && v.lastStopAt && v.posAt > v.lastStopAt && v.sog >= 3 && v.navStatus !== 1 && v.navStatus !== 5
@@ -318,7 +318,7 @@
       departedEstimated, arrivedAt, progress, progressMode, daysLeft, delayDays, lastSeen, daysSinceUpdate,
       stale, state, etaSource: crNewer && cr.eta ? cr.source : null, origin,
       // No known port: show what the vessel's own AIS says (e.g. "AU WEI"), whatever the country.
-      aisDest: !port && v && v.dest ? v.dest : null };
+      aisDest: !port ? saved.destText || (v && v.dest) || null : null };
   }
 
   // Where the voyage started, for distance-based progress: the inferred departure point, or Chile when
@@ -543,7 +543,7 @@
   }
 
   const api = { DAY, portFromLocode, parseCarrierEvents, PORTS, CARRIERS, CHILE_BOX, parseDestination, inferEta, distanceKm, inChile, isAtPort,
-    parseVesselCsv, parseDate, mergeSnapshot, mergeExternal, updateVoyage, carrierFromName, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
+    parseVesselCsv, parseDate, portFromText, mergeSnapshot, mergeExternal, updateVoyage, carrierFromName, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KuaiLogic = api;
 })(typeof self !== 'undefined' ? self : this);
