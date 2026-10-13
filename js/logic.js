@@ -258,8 +258,11 @@
     const crNewer = cr && cr.at && (!saved.etaManual || !saved.etaManualAt || cr.at > saved.etaManualAt);
     const port = saved.port || (cr && cr.port) || (voy && voy.port) || (v && v.destPort) || null;
     const eta = (crNewer && cr.eta) || saved.etaManual || (cr && cr.eta) || (v && v.destPort === port ? v.eta : null) || (voy && voy.firstEta) || null;
-    const departed = saved.departedManual || (cr && cr.departedAt) || (voy && voy.departedAt) || null;
-    const departedEstimated = !saved.departedManual && !(cr && cr.departedAt) && !!(voy && voy.departedEstimated);
+    // Departure from the last port seen in AIS, wherever it is: the last stop, once the vessel is under way again.
+    const lastStopDep = v && v.lastStopAt && v.posAt > v.lastStopAt && v.sog >= 3 && v.navStatus !== 1 && v.navStatus !== 5
+      ? v.lastStopAt : null;
+    const departed = saved.departedManual || (cr && cr.departedAt) || (voy && voy.departedAt) || lastStopDep || null;
+    const departedEstimated = !saved.departedManual && !(cr && cr.departedAt) && (voy && voy.departedAt ? !!voy.departedEstimated : !!lastStopDep);
     const arrivedAt = saved.arrivedManual || (cr && cr.arrivedAt) || (voy && voy.arrivedAt) || null;
     const originalEta = saved.originalEta || (voy && voy.firstEta) || eta;
 
@@ -294,7 +297,7 @@
     return { port, portName: port && PORTS[port] ? PORTS[port].name : null, eta, originalEta, departed,
       departedEstimated, arrivedAt, progress, progressMode, daysLeft, delayDays, lastSeen, daysSinceUpdate,
       stale, state, etaSource: crNewer && cr.eta ? cr.source : null,
-      // No China port known: still show what the vessel's own AIS says (e.g. "AU WEI"), so the row is never blank.
+      // No known port: show what the vessel's own AIS says (e.g. "AU WEI"), whatever the country.
       aisDest: !port && v && v.dest ? v.dest : null };
   }
 
