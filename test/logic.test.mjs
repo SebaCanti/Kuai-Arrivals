@@ -289,3 +289,12 @@ test('vessel bound outside China still shows its AIS destination and ETA', () =>
   assert.equal(st.aisDest, 'AU WEI');
   assert.equal(st.eta, '2026-10-16T00:00:00.000Z');
 });
+
+test('departure from the last stop shows for any vessel, whatever its destination', () => {
+  const v = { name: 'ANY', dest: 'FI KOK', destPort: null, eta: '2026-10-18T04:00:00.000Z', lat: 53.6, lon: 4.8, sog: 12, navStatus: 0,
+    posAt: '2026-10-12T20:15:16Z', lastSeen: '2026-10-12T20:15:16Z', lastStopAt: '2026-10-11T08:00:00Z', lastStopLat: 51.9, lastStopLon: 4.1 };
+  const st = L.computeStatus({ id: '2', name: 'ANY' }, v, Date.parse('2026-10-13T00:00:00Z'), 3);
+  assert.equal(st.departed, '2026-10-11T08:00:00Z');
+  assert.equal(st.departedEstimated, true);
+  assert.equal(st.aisDest, 'FI KOK');
+});

@@ -204,7 +204,7 @@
     const status = boardStatus(st);
     const ck = carrierKey(s);
     const days = st.state === 'arrived' ? '—' : st.daysLeft == null ? '—' : st.daysLeft < 0 ? `+${-st.daysLeft}` : String(st.daysLeft);
-    const eta = st.arrivedAt ? L.fmtDate(st.arrivedAt) : L.fmtDate(st.eta) + (st.aisDest && st.eta ? '*' : '');
+    const eta = st.arrivedAt ? L.fmtDate(st.arrivedAt) : L.fmtDate(st.eta);
     const d0 = idx * 120;
     let warn = '';
     if (st.stale) {
@@ -215,7 +215,7 @@
         ${vfLink(s, v)}</div>`;
     }
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
-      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}${st.aisDest ? ` · <em class="b-arr-note">*AIS says bound for ${esc(st.aisDest)}, not a China port</em>` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
+      <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : '')}${st.originalEta && st.delayDays ? ` · orig. ETA ${L.fmtDate(st.originalEta)}` : ''}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
       <span class="b-to">${flap((st.portName || st.aisDest || '—').toUpperCase(), d0 + 200)}</span>
       <span class="b-dep">${flap(st.departed ? L.fmtDate(st.departed).toUpperCase() : '—', d0 + 300)}</span>
       <span class="b-bar"><span class="bar ${st.progressMode === 'distance' ? 'est' : ''}"><i style="width:${pct}%"></i></span><small>${st.state === 'arrived' ? '100%' : pct + '%'}</small></span>
@@ -319,7 +319,7 @@
       : 'No AIS position';
     return `<article class="card ${st.state === 'arrived' ? 'arrived' : ''}" data-id="${esc(s.id)}">
       <div class="card-head">
-        <div><div class="v-name">${esc(s.name)}</div><div class="v-port">→ ${esc(st.portName || (st.aisDest ? st.aisDest + ' (AIS, not China)' : 'Destination unknown'))}</div></div>
+        <div><div class="v-name">${esc(s.name)}</div><div class="v-port">→ ${esc(st.portName || st.aisDest || 'Destination unknown')}</div></div>
         <span class="badge ${st.state}">${badge}</span>
       </div>
       <div class="days">${headline(st)}</div>
@@ -343,9 +343,19 @@
       Object.keys(L.CARRIERS).map(k => `<option value="${k}" ${s.carrier === k ? 'selected' : ''}>${L.CARRIERS[k].name}</option>`).join('');
     const bls = (s.bls || []).map((b, i) => `<li><span>${esc(b.ref)} <span class="muted">${esc(L.CARRIERS[b.carrier || L.detectCarrier(b.ref)]?.name || 'Unknown carrier')}</span></span>
       <span>${blLink(b) || ''} <button class="x" data-act="rm-bl" data-i="${i}" aria-label="Remove">×</button></span></li>`).join('');
-    const ais = v ? `AIS destination: “${esc(v.dest || '—')}” · IMO ${esc(v.imo || '—')} · MMSI ${esc(v.mmsi)}<br>
-      ${v.posSource ? `Source: ${esc(v.posSource)} · ` : ''}${v.lat != null ? `Position ${v.lat.toFixed(2)}, ${v.lon.toFixed(2)} · ` : ''}AIS ETA ${L.fmtDate(v.eta)}
-      ${v.etaHistory && v.etaHistory.length > 1 ? `<br>ETA history: ${v.etaHistory.map(h => L.fmtDate(h.eta)).join(' → ')}` : ''}<br>
+    const nav = { 0: 'Under way (engine)', 1: 'At anchor', 2: 'Not under command', 3: 'Restricted manoeuvrability',
+      5: 'Moored', 6: 'Aground', 7: 'Fishing', 8: 'Under way (sailing)' };
+    const row = (k, val) => val == null || val === '' ? '' : `<br>${k}: ${esc(val)}`;
+    const ais = v ? `AIS destination: “${esc(v.dest || '—')}” · AIS ETA ${L.fmtDate(v.eta)}
+      ${row('Last seen', v.lastSeen && fmtDateTime(v.lastSeen))}
+      ${row('Position', v.lat != null ? `${v.lat.toFixed(3)}, ${v.lon.toFixed(3)}${v.posAt ? ` (${fmtDateTime(v.posAt)})` : ''}` : null)}
+      ${row('Speed / course', v.sog != null ? `${v.sog.toFixed(1)} kn${v.cog != null ? ` · ${Math.round(v.cog)}°` : ''}` : null)}
+      ${row('Status', v.navStatus != null ? nav[v.navStatus] || `Code ${v.navStatus}` : null)}
+      ${row('Last stop', v.lastStopAt ? `${fmtDateTime(v.lastStopAt)} at ${v.lastStopLat.toFixed(2)}, ${v.lastStopLon.toFixed(2)}` : null)}
+      ${row('Last on the Chilean coast', v.lastChileAt && fmtDateTime(v.lastChileAt))}
+      ${row('First heard', v.firstSeen && fmtDateTime(v.firstSeen))}
+      ${v.etaHistory && v.etaHistory.length > 1 ? `<br>ETA history: ${v.etaHistory.map(h => L.fmtDate(h.eta)).join(' → ')}` : ''}
+      <br>IMO ${esc(v.imo || '—')} · MMSI ${esc(v.mmsi)}${v.callsign ? ` · Call sign ${esc(v.callsign)}` : ''}${v.length ? ` · ${esc(v.length)} m` : ''}${v.posSource ? ` · Source ${esc(v.posSource)}` : ''}<br>
       <a href="https://www.vesselfinder.com/vessels/details/${esc(v.imo || v.mmsi)}" target="_blank" rel="noopener">VesselFinder</a> ·
       <a href="https://www.marinetraffic.com/en/ais/details/ships/mmsi:${esc(v.mmsi)}" target="_blank" rel="noopener">MarineTraffic</a>`
       : 'This vessel is not in the AIS data yet. It is linked automatically when it appears; meanwhile set the dates by hand.';
