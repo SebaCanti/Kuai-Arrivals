@@ -534,6 +534,61 @@
     if (errors.length) console.warn(errors.join('\n'));
   }
 
+  // ── SYNC BETWEEN DEVICES ──
+  // The list lives in each browser's storage (the website and the installed app are separate), so it is
+  // carried over as a compressed code or link: kuai1.<base64url(deflate(JSON))>.
+  async function syncCode() {
+    const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, saved }));
+    const z = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+    let bin = ''; z.forEach(b => { bin += String.fromCharCode(b); });
+    return 'kuai1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function readSyncCode(text) {
+    const m = String(text).match(/kuai1\.([A-Za-z0-9_-]+)/);
+    if (!m) throw new Error('no code');
+    const bin = atob(m[1].replace(/-/g, '+').replace(/_/g, '/'));
+    const z = Uint8Array.from(bin, c => c.charCodeAt(0));
+    const json = await new Response(new Blob([z]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+    const obj = JSON.parse(json);
+    if (!obj || !Array.isArray(obj.saved)) throw new Error('bad code');
+    return obj.saved;
+  }
+  // Incoming vessels replace the same vessel here and new ones are added; vessels only on this device stay.
+  function mergeSync(list) {
+    let added = 0, updated = 0;
+    for (const s of list) {
+      if (!s || !s.id || !s.name) continue;
+      const i = saved.findIndex(x => x.id === s.id || (L.compact(x.name) === L.compact(s.name)));
+      if (i >= 0) { saved[i] = s; updated++; } else { saved.push(s); added++; }
+    }
+    persist(); reconcile(); render();
+    toast(`Synced: ${added} added, ${updated} updated.`);
+  }
+  async function copySync() {
+    try {
+      const url = `${location.origin}${location.pathname}#sync=${await syncCode()}`;
+      if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) { await navigator.share({ title: 'Kuai Arrivals list', text: url }); return; }
+      await navigator.clipboard.writeText(url);
+      toast(`Copied (${saved.length} vessels). Paste it in Settings → Paste on the other device.`);
+    } catch (e) { if (e && e.name !== 'AbortError') toast('Could not copy the list'); }
+  }
+  async function pasteSync() {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch { /* fall back to a prompt */ }
+    if (!/kuai1\./.test(text)) text = prompt('Paste the sync code or link from the other device:') || '';
+    if (!text) return;
+    try { mergeSync(await readSyncCode(text)); } catch { toast('That is not a Kuai Arrivals sync code'); }
+  }
+  async function syncFromHash() {
+    if (!/[#&]sync=kuai1\./.test(location.hash)) return;
+    const code = location.hash;
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      const list = await readSyncCode(code);
+      if (confirm(`Add or update ${list.length} vessels from the other device? Vessels only on this device are kept.`)) mergeSync(list);
+    } catch { toast('That sync link could not be read'); }
+  }
+
   function arrivedOf(s) { return L.computeStatus(s, vesselOf(s), Date.now(), settings.staleDays).arrivedAt; }
 
   // ── UTIL ──
@@ -583,6 +638,9 @@
       if (e.key === 'Enter') { const li = $('cntrResults').querySelector('[data-goto]'); if (li) cntrGoto(li.dataset.goto, li.dataset.ref); }
     });
     $('cntrResults').addEventListener('click', e => { const li = e.target.closest('[data-goto]'); if (li) cntrGoto(li.dataset.goto, li.dataset.ref); });
+    $('syncCopy').addEventListener('click', copySync);
+    $('syncPaste').addEventListener('click', pasteSync);
+    syncFromHash();
     $('importFile').addEventListener('change', e => { if (e.target.files[0]) importList(e.target.files[0]); e.target.value = ''; });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fetchData(); });
 
