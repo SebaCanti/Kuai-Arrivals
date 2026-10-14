@@ -71,6 +71,13 @@
         <label class="btn primary" style="white-space:nowrap">Add New Vessel List<input type="file" id="importFile" accept=".csv,text/csv,.txt,application/json,.json" hidden></label>
       </div>
       <div class="row">
+        <span>Shared list<small>Works like Kuai Tracking: on the PC, with Kuai Tracking running, your list is saved there and published encrypted. On the phone or other browsers, type the same password as the Kuai Tracking phone link once.</small><small id="listStatus"></small></span>
+        <span style="display:grid;gap:6px;min-width:170px">
+          <input type="password" id="listPw" placeholder="Password" autocomplete="current-password">
+          <button type="button" class="btn primary" id="listPwSave">Load list</button>
+        </span>
+      </div>
+      <div class="row">
         <span>Sync with another device<small>The website and the phone app each keep their own list. Copy your sync code here, then on the other device press Paste and paste it. Vessels are added or updated there; nothing is deleted.</small></span>
         <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
           <button type="button" class="btn primary" id="syncCopy">Copy my list</button>
