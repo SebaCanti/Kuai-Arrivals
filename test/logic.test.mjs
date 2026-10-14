@@ -316,3 +316,17 @@ test('typed destination outside the China list wins and is shown as written', ()
   assert.equal(st.port, null);
   assert.equal(st.aisDest, 'Busan');
 });
+
+test('divergences: manual entries vs later AIS data', () => {
+  const v = { mmsi: '1', dest: 'CNNGB', destPort: 'NINGBO', eta: '2026-11-18T00:00:00Z', lastSeen: '2026-10-14T00:00:00Z' };
+  const s = { id: 'a', name: 'X', mmsi: '1', port: 'SHANGHAI', etaManual: '2026-11-14T00:00:00Z', originPort: 'San Antonio' };
+  const ds = L.divergences(s, v, Date.parse('2026-10-14T12:00:00Z'));
+  const f = Object.fromEntries(ds.map(d => [d.field, d]));
+  assert.ok(f.dest && /Ningbo/i.test(f.dest.ais));
+  assert.equal(f.eta.days, 4);
+  assert.equal(f.origin, undefined); // AIS has no origin here
+  assert.deepEqual(L.divergences({ ...s, port: 'NINGBO', etaManual: '2026-11-18T05:00:00Z' }, v, Date.parse('2026-10-14T12:00:00Z')), []);
+  assert.deepEqual(L.divergences(s, null), []);
+  const t = L.divergences({ id: 'b', name: 'Y', destText: 'Weihai' }, { dest: 'AU WEI' });
+  assert.equal(t.length, 1);
+});
