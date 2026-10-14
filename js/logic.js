@@ -332,6 +332,38 @@
   function startOfDay(iso) { const d = new Date(iso); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
   function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
 
+  // Where what the user typed by hand disagrees with what AIS later reports. The AIS side is computed with
+  // every manual field (and carrier data) cleared, so it is exactly what the vessel itself broadcasts.
+  function divergences(saved, v, nowMs) {
+    if (!v) return [];
+    const ais = computeStatus({ name: saved.name, mmsi: saved.mmsi }, v, nowMs);
+    const out = [];
+    const norm = x => compact(String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    const days = (a, b) => Math.abs(Math.round((startOfDay(a) - startOfDay(b)) / DAY));
+    const typedDest = saved.port ? (PORTS[saved.port] ? PORTS[saved.port].name : saved.port) : saved.destText;
+    if (typedDest) {
+      const aisDest = ais.port ? (PORTS[ais.port] ? PORTS[ais.port].name : ais.port) : v.dest || null;
+      const same = saved.port ? ais.port === saved.port
+        : !ais.port && (norm(aisDest).includes(norm(typedDest)) || norm(typedDest).includes(norm(aisDest)));
+      if (aisDest && norm(aisDest) && !same) {
+        out.push({ field: 'dest', label: 'Destination', manual: typedDest,
+          ais: ais.port && v.dest && norm(v.dest) !== norm(aisDest) ? `${aisDest} (${v.dest})` : aisDest });
+      }
+    }
+    if (saved.etaManual && ais.eta && days(saved.etaManual, ais.eta) >= 1) {
+      out.push({ field: 'eta', label: 'ETA', manual: fmtDate(saved.etaManual), ais: fmtDate(ais.eta),
+        days: Math.round((startOfDay(ais.eta) - startOfDay(saved.etaManual)) / DAY) });
+    }
+    if (saved.departedManual && ais.departed && days(saved.departedManual, ais.departed) >= 1) {
+      out.push({ field: 'departed', label: 'Departure', manual: fmtDate(saved.departedManual), ais: fmtDate(ais.departed) });
+    }
+    if (saved.originPort && ais.origin && ais.origin !== 'Chile' &&
+        !norm(ais.origin).includes(norm(saved.originPort)) && !norm(saved.originPort).includes(norm(ais.origin))) {
+      out.push({ field: 'origin', label: 'Origin port', manual: saved.originPort, ais: ais.origin });
+    }
+    return out;
+  }
+
   // Events to notify about. `memo` is a plain object persisted by the caller (dedupe store).
   function pendingAlerts(savedList, data, memo, settings, nowMs) {
     const out = [];
@@ -352,6 +384,10 @@
             body: d ? `${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} ${d > 0 ? 'delayed' : 'early'} vs original ETA ${fmtDate(st.originalEta)}.` : 'Back on the original ETA.' });
         }
         memo[lk] = day;
+      }
+      for (const d of divergences(s, v, nowMs)) {
+        const k = `div:${s.id}:${d.field}:${d.manual}:${d.ais}`;
+        if (!memo[k]) { memo[k] = 1; out.push({ tag: k, title: `${s.name}: AIS differs from your ${d.label}`, body: `You typed ${d.manual} · AIS says ${d.ais}.` }); }
       }
       if (st.stale && v) {
         const k = `stale:${s.id}:${(st.lastSeen || '').slice(0, 10)}`;
@@ -543,7 +579,7 @@
   }
 
   const api = { DAY, portFromLocode, parseCarrierEvents, PORTS, CARRIERS, CHILE_BOX, parseDestination, inferEta, distanceKm, inChile, isAtPort,
-    parseVesselCsv, parseDate, portFromText, mergeSnapshot, mergeExternal, updateVoyage, carrierFromName, computeStatus, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
+    parseVesselCsv, parseDate, portFromText, mergeSnapshot, mergeExternal, updateVoyage, carrierFromName, computeStatus, divergences, pendingAlerts, fmtDate, detectCarrier, trackingUrl, compact };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KuaiLogic = api;
 })(typeof self !== 'undefined' ? self : this);

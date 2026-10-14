@@ -201,6 +201,14 @@
       <span>Vessel</span><span>Origin</span><span>Departed</span><span>To</span><span>Voyage</span><span title="Latest (updated) ETA">Upd ETA</span><span title="Days to destination">DTD</span><span>Status</span></div>`;
   }
 
+  // Manual entries that AIS now contradicts: one line per field, shown until the user fixes or accepts it.
+  function divergeHtml(s, v) {
+    const ds = L.divergences(s, v, Date.now());
+    if (!ds.length) return '';
+    return `<div class="warn diverge">⚠ AIS differs from what you typed:${ds.map(d =>
+      `<br>· <b>${esc(d.label)}</b>: you typed ${esc(d.manual)} · AIS says ${esc(d.ais)}${d.days ? ` (${d.days > 0 ? '+' : ''}${d.days} d)` : ''}`).join('')}</div>`;
+  }
+
   function boardRowHtml({ s, v, st }, idx) {
     const pct = Math.round((st.progress || 0) * 100);
     const status = boardStatus(st);
@@ -216,6 +224,7 @@
       warn = `<div class="warn">⚠ ${what} ${links ? 'Check the ETA with your BL: ' + links : home ? 'Check the ETA on ' + home + ' with a BL or container number.' : 'Set the carrier and add a BL in Details.'}
         ${vfLink(s, v)}</div>`;
     }
+    warn += divergeHtml(s, v);
     return `<div class="b-row ${status.cls} ${open.has(s.id) ? 'open' : ''}" data-id="${esc(s.id)}" data-act="toggle" role="row" tabindex="0">
       <span class="b-vessel"><b>${flap(s.name, d0)}</b><small>${cntrCount(s)}${st.state === 'arrived' ? `<em class="b-arr-note">Arrived ${esc(L.fmtDate(st.arrivedAt))} at ${esc(st.portName || 'port')}</em> · ` : ''}${esc(ck ? L.CARRIERS[ck].name : 'Carrier —')} · orig. ETA ${st.originalEta ? L.fmtDate(st.originalEta) : '—'}${st.etaSource ? ` · ETA ${esc(st.etaSource)} API` : ''}</small>${open.has(s.id) ? cntrLine(s) : ''}</span>
       <span class="b-from">${flap((st.origin || '—').toUpperCase(), d0 + 150)}</span>
@@ -317,6 +326,7 @@
         : 'Set the carrier and add a BL or container number in Details to check the ETA on the carrier\'s site.';
       warn = `<div class="warn">⚠ ${what} ${next}</div>`;
     }
+    warn += divergeHtml(s, v);
     const ais = v && v.lastSeen
       ? `Updated ${fmtDateTime(v.lastSeen)}${v.sog != null ? ` · ${v.sog.toFixed(1)} kn` : ''}${v.posSource ? ` · ${v.posSource}` : ''}`
       : 'No AIS position';
