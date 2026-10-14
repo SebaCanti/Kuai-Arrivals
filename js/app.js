@@ -18,11 +18,9 @@
   function load(k, fallback) { try { return JSON.parse(localStorage.getItem(k)) || fallback; } catch { return fallback; } }
   function persist() {
     for (const s of saved) if (s.mmsi && data.vessels[s.mmsi]) s.lastAis = data.vessels[s.mmsi];
-    stampChanges();
     localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     mirrorToServiceWorker();
-    schedulePcPush();
   }
 
   // ── DATA ──
@@ -411,7 +409,6 @@
     if (act === 'remove') {
       if (!confirm(`Remove ${s.name} from your list?`)) return;
       saved = saved.filter(x => x !== s);
-      tombstones[s.id] = new Date().toISOString(); localStorage.setItem(TOMB_KEY, JSON.stringify(tombstones));
     } else if (act === 'add-bl') {
       const ref = card.querySelector('[data-bl-input]').value.trim().toUpperCase();
       if (!ref) return;
@@ -537,95 +534,6 @@
     if (errors.length) console.warn(errors.join('\n'));
   }
 
-  // ── SHARED LIST (same way as Kuai Tracking) ──
-  // On the PC, the Kuai Tracking server (localhost:3100) keeps the master copy of this list and publishes it
-  // encrypted with the owner's password to data/mylist.json. Every device reads that file with the password
-  // and merges it vessel by vessel (newest change wins). Removed vessels leave a tombstone.
-  const PC_API = 'http://localhost:3100/api/arrivals/list', MYLIST_URL = 'data/mylist.json';
-  const TOMB_KEY = 'kuai.tombstones.v1', LISTPW_KEY = 'kuai.listpw.v1';
-  let tombstones = load(TOMB_KEY, {});
-  let pcOnline = false, pcTimer = null;
-  const fingerprint = x => { const { lastAis, updatedAt, ...rest } = x; return JSON.stringify(rest); };
-  const prints = new Map(saved.map(x => [x.id, fingerprint(x)]));
-  function stampChanges() {
-    const now = new Date().toISOString();
-    for (const x of saved) { const f = fingerprint(x); if (prints.get(x.id) !== f) { x.updatedAt = now; prints.set(x.id, f); } }
-  }
-  const strip = x => { const { lastAis, ...rest } = x; return rest; };
-  function mergeShared(remote) {
-    let changed = false;
-    for (const [id, at] of Object.entries(remote.tombstones || {})) if (!tombstones[id] || tombstones[id] < at) { tombstones[id] = at; changed = true; }
-    for (const r of remote.saved || []) {
-      if (!r || !r.id || !r.name) continue;
-      const i = saved.findIndex(x => x.id === r.id || L.compact(x.name) === L.compact(r.name));
-      if (i < 0) {
-        if (!(tombstones[r.id] && tombstones[r.id] >= (r.updatedAt || ''))) { saved.push(r); prints.set(r.id, fingerprint(r)); changed = true; }
-      } else if ((r.updatedAt || '') > (saved[i].updatedAt || '')) {
-        saved[i] = Object.assign(r, { lastAis: saved[i].lastAis }); prints.set(r.id, fingerprint(r)); changed = true;
-      }
-    }
-    const n = saved.length;
-    saved = saved.filter(x => !(tombstones[x.id] && tombstones[x.id] >= (x.updatedAt || '')));
-    if (changed || saved.length !== n) {
-      localStorage.setItem(SAVED_KEY, JSON.stringify(saved)); localStorage.setItem(TOMB_KEY, JSON.stringify(tombstones));
-      reconcile(); render();
-    }
-  }
-  const unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
-  async function openMyList(box, password) {
-    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
-    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: unb64(box.salt), iterations: box.iter || 200000, hash: 'SHA-256' },
-      base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
-    const gz = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, key, unb64(box.data));
-    return JSON.parse(await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).text());
-  }
-  function setListStatus(t) { const el = $('listStatus'); if (el) el.textContent = t; }
-  async function pullShared() {
-    // PC: the Kuai Tracking server is the master copy.
-    try {
-      const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 1500);
-      const res = await fetch(PC_API, { cache: 'no-store', signal: ctrl.signal });
-      if (res.ok) {
-        const pc = await res.json();
-        pcOnline = true;
-        mergeShared(pc);
-        const mine = JSON.stringify({ saved: saved.map(strip), tombstones });
-        if (mine !== JSON.stringify({ saved: (pc.saved || []), tombstones: pc.tombstones || {} })) pushPc();
-        setListStatus(`Linked to Kuai Tracking on this PC · ${saved.length} vessels${pc.publish && pc.publish.at ? ` · published ${fmtDateTime(pc.publish.at)}` : ''}`);
-        return;
-      }
-    } catch { /* not on the PC, or the server is off */ }
-    pcOnline = false;
-    // Other devices: the encrypted copy published by the PC.
-    const pw = localStorage.getItem(LISTPW_KEY);
-    try {
-      const res = await fetch(`${MYLIST_URL}?t=${Date.now()}`, { cache: 'no-store' });
-      if (!res.ok) { setListStatus('No shared list published yet. Open Kuai Arrivals on the PC while Kuai Tracking is running.'); return; }
-      const box = await res.json();
-      if (!pw) { setListStatus('Type the Kuai Tracking phone-link password to load your list.'); return; }
-      mergeShared(await openMyList(box, pw));
-      setListStatus(`Shared list loaded · ${saved.length} vessels${box.at ? ` · published ${fmtDateTime(box.at)}` : ''}`);
-    } catch (e) {
-      setListStatus(e && e.name === 'OperationError' ? 'Wrong password for the shared list' : 'Could not read the shared list');
-    }
-  }
-  async function pushPc() {
-    if (!pcOnline) return;
-    try {
-      const res = await fetch(PC_API, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ saved: saved.map(strip), tombstones, updatedAt: new Date().toISOString() }) });
-      if (!res.ok) throw new Error(res.status);
-      setListStatus(`Linked to Kuai Tracking on this PC · ${saved.length} vessels · saved`);
-    } catch { setListStatus('Could not save to Kuai Tracking on this PC'); }
-  }
-  function schedulePcPush() { if (pcOnline) { clearTimeout(pcTimer); pcTimer = setTimeout(pushPc, 1500); } }
-  function saveListPassword() {
-    const pw = $('listPw').value;
-    if (!pw) return;
-    localStorage.setItem(LISTPW_KEY, pw); $('listPw').value = '';
-    pullShared();
-  }
-
   // ── SYNC BETWEEN DEVICES ──
   // The list lives in each browser's storage (the website and the installed app are separate), so it is
   // carried over as a compressed code or link: kuai1.<base64url(deflate(JSON))>.
@@ -733,11 +641,8 @@
     $('syncCopy').addEventListener('click', copySync);
     $('syncPaste').addEventListener('click', pasteSync);
     syncFromHash();
-    $('listPwSave').addEventListener('click', saveListPassword);
-    pullShared();
-    setInterval(pullShared, 5 * 60 * 1000);
     $('importFile').addEventListener('change', e => { if (e.target.files[0]) importList(e.target.files[0]); e.target.value = ''; });
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { fetchData(); pullShared(); } });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fetchData(); });
 
     if (design) {
       document.body.dataset.design = design;
