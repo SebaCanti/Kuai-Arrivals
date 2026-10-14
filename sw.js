@@ -1,5 +1,5 @@
 // Kuai Arrivals — Service Worker
-const CACHE_NAME = 'kuai-v22';
+const CACHE_NAME = 'kuai-v23';
 const DATA_URL = 'data/vessels.json';
 
 const STATIC_ASSETS = [
@@ -39,9 +39,6 @@ self.addEventListener('fetch', event => {
   // Icons and the manifest go straight to the network: iOS fails to read the home-screen icon when a
   // service worker answers that request, and shows a letter instead.
   if (/\/icons\/|manifest\.json$/.test(url.pathname)) return;
-
-  // The encrypted shared list: always from the network (never cached, so each ?t= query adds nothing).
-  if (url.pathname.endsWith('/data/mylist.json')) return;
 
   // Vessel data: network first, cached copy when offline.
   if (url.pathname.endsWith('/' + DATA_URL)) {
